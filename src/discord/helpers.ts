@@ -1,0 +1,118 @@
+import {
+  ChannelType,
+  PermissionFlagsBits,
+  PermissionsBitField,
+  type CategoryChannel,
+  type GuildBasedChannel,
+  type GuildMember,
+  type OverwriteResolvable,
+  type PermissionOverwrites,
+  type RepliableInteraction,
+} from "discord.js";
+
+export function parseSnowflake(value: string): string | null {
+  const match = value.trim().match(/^(?:<#)?(\d{17,20})>?$/);
+  return match?.[1] ?? null;
+}
+
+export function isAdministrator(interaction: RepliableInteraction): boolean {
+  return interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ?? false;
+}
+
+export function asCategory(channel: GuildBasedChannel | null): CategoryChannel | null {
+  return channel?.type === ChannelType.GuildCategory ? channel : null;
+}
+
+export function assertBotCanCreateRecruitments(category: CategoryChannel, me: GuildMember): void {
+  const required = [
+    PermissionFlagsBits.ViewChannel,
+    PermissionFlagsBits.SendMessages,
+    PermissionFlagsBits.EmbedLinks,
+    PermissionFlagsBits.ReadMessageHistory,
+    PermissionFlagsBits.ManageChannels,
+    PermissionFlagsBits.ManageRoles,
+    PermissionFlagsBits.CreatePublicThreads,
+    PermissionFlagsBits.SendMessagesInThreads,
+  ];
+  const missing = category.permissionsFor(me).missing(required);
+  if (missing.length > 0) {
+    throw new Error(
+      `봇에 필요한 채널 권한이 부족합니다: ${missing.join(", ")}`,
+    );
+  }
+}
+
+export function buildRecruitmentPermissionOverwrites(
+  inheritedOverwrites: Iterable<PermissionOverwrites>,
+  everyoneRoleId: string,
+  botUserId: string,
+): OverwriteResolvable[] {
+  const overwrites = new Map<
+    string,
+    { id: string; type?: PermissionOverwrites["type"]; allow: PermissionsBitField; deny: PermissionsBitField }
+  >();
+
+  for (const overwrite of inheritedOverwrites) {
+    overwrites.set(overwrite.id, {
+      id: overwrite.id,
+      type: overwrite.type,
+      allow: new PermissionsBitField(overwrite.allow.bitfield),
+      deny: new PermissionsBitField(overwrite.deny.bitfield),
+    });
+  }
+
+  for (const overwrite of overwrites.values()) {
+    if (overwrite.id === botUserId) continue;
+    overwrite.allow.remove(
+      PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.CreatePublicThreads,
+      PermissionFlagsBits.CreatePrivateThreads,
+    );
+    overwrite.deny.add(
+      PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.CreatePublicThreads,
+      PermissionFlagsBits.CreatePrivateThreads,
+    );
+    overwrite.deny.remove(PermissionFlagsBits.SendMessagesInThreads);
+    overwrite.allow.add(PermissionFlagsBits.SendMessagesInThreads);
+  }
+
+  const everyone = overwrites.get(everyoneRoleId) ?? {
+    id: everyoneRoleId,
+    allow: new PermissionsBitField(),
+    deny: new PermissionsBitField(),
+  };
+  everyone.allow.remove(
+    PermissionFlagsBits.SendMessages,
+    PermissionFlagsBits.CreatePublicThreads,
+    PermissionFlagsBits.CreatePrivateThreads,
+  );
+  everyone.deny.add(
+    PermissionFlagsBits.SendMessages,
+    PermissionFlagsBits.CreatePublicThreads,
+    PermissionFlagsBits.CreatePrivateThreads,
+  );
+  everyone.deny.remove(PermissionFlagsBits.SendMessagesInThreads);
+  everyone.allow.add(PermissionFlagsBits.SendMessagesInThreads);
+  overwrites.set(everyoneRoleId, everyone);
+
+  const bot = overwrites.get(botUserId) ?? {
+    id: botUserId,
+    allow: new PermissionsBitField(),
+    deny: new PermissionsBitField(),
+  };
+  const botPermissions = [
+    PermissionFlagsBits.ViewChannel,
+    PermissionFlagsBits.SendMessages,
+    PermissionFlagsBits.EmbedLinks,
+    PermissionFlagsBits.ReadMessageHistory,
+    PermissionFlagsBits.CreatePublicThreads,
+    PermissionFlagsBits.SendMessagesInThreads,
+    PermissionFlagsBits.ManageThreads,
+  ];
+  bot.deny.remove(botPermissions);
+  bot.allow.add(botPermissions);
+  overwrites.set(botUserId, bot);
+
+  return [...overwrites.values()];
+}

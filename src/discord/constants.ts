@@ -1,0 +1,6 @@
+export const PANEL_CHANNEL_NAME = "내전-모집";
+export const RECRUITMENT_THREAD_NAME = "💬ㆍ내전 채팅";
+export const MENTION_MESSAGE_LIFETIME_MS = 14_000;
+export const ALL_MENTION_COOLDOWN_KEY = "ALL_MENTION";
+export const SUMMON_CONFIRMATION_TEXT = "전부 소환";
+export const SUMMON_VOICE_CHANNEL_ID = "812822837495988244";
