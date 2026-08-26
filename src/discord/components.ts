@@ -65,6 +65,7 @@ export function buildRecruitmentButtons(
         .setLabel("삭제")
         .setEmoji("🗑️")
         .setStyle(ButtonStyle.Danger),
+    ),
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(customIds.manage(recruitmentId))
