@@ -23,19 +23,22 @@ import type { EmbedConfig } from "./embedTypes.js";
 export const EMBED_CONFIG: EmbedConfig = {
   panel: {
     color: 0xf2ad83,
-    title: "🎮 CR 내전 모집",
     description: [
-      "원하는 버튼을 눌러 새 모집 채널을 만들 수 있어요.",
+       "",
+      "# 🎮 CR 내전 메인 툴",
       "",
-      "🐂 **협곡 내전 모집** — 지금 바로 협곡 모집",
-      "❄️ **아람 내전 모집** — 지금 바로 아람 모집",
-      "📅 **내전 예약** — 관리자가 날짜와 시간을 정해 미리 모집",
+      "-# 원하는 버튼을 눌러, 내전 대기열을 만들어보세요!",
       "",
-      "한 사람당 협곡·아람·예약 모집을 각각 하나씩 열 수 있어요.",
+      "> ### 🐂 **협곡 내전 모집**\n소환사의 협곡 내전 대기열을 생성합니다. 인당 최대 1개씩만 생성 가능하고, 최대 20명까지 모집 가능합니다.",
+      "",
+      "> ### ❄️ **아람 내전 모집**\n증강 아람 내전 대기열을 생성합니다. 인당 최대 1개씩만 생성 가능하고, 최대 20명까지 모집 가능합니다.",
+      "",
+      "> ### 📅 **내전 예약**\n내전 대기열을 미리 생성합니다. 현재는 관리자만 이 기능을 사용 가능해며, 이벤트나 정기내전을 위한 기능입니다.",
+      "",
     ],
     footer: {
-      text: "생성된 모집 채널은 이 패널과 같은 카테고리에 만들어집니다.",
-      icon_url: null,
+      text: 'Copyright 2026. 알디. All rights reserved.',
+      iconURL: 'https://cdn.discordapp.com/avatars/1210069602214613002/28579ea8ba6b5d9291f8a7d9a301c5c1.webp?size=100',
     },
 
     // 필요하면 아래 표준 항목을 추가하세요.
@@ -55,32 +58,30 @@ export const EMBED_CONFIG: EmbedConfig = {
       ARAM: "아람",
     },
     gameEmojis: {
-      RIFT: "🐂",
-      ARAM: "❄️",
+      RIFT: "<:rift:1541797589827985478>",
+      ARAM: "<:aram:1541797572962812104>",
     },
-    title: "{emoji} {reservationPrefix}{game} 내전 모집중 {emoji}",
     description: [
-      "{creatorMention}님이 {game} 내전을 모집하고 있어요!",
+      "# {emoji} {reservationPrefix}{game} 내전 모집중 {emoji}",
+      "-# {lead}",
       "",
-      "{lead}",
+      "> ### **👑 내전 주최자** \n바로... ||{creatorMention}||",
+      "",
       "{scheduleSection}",
       "{descriptionSection}",
-      "",
-      "아래 버튼을 누르면 내전에 참가할 수 있어요!",
+      "‎ ",
     ],
     footer: {
-      text: "선착순 {callSize}명 호출 • {summonFooter}",
-      icon_url: null,
+      text: 'Copyright 2026. 알디. All rights reserved.',
+      iconURL: 'https://cdn.discordapp.com/avatars/1210069602214613002/28579ea8ba6b5d9291f8a7d9a301c5c1.webp?size=100',
     },
-    timestamp: "{createdAtIso}",
-
     leads: {
-      immediate: "**지금 {game} 내전 하실 분! 사람이 모이면 바로 시작해요.**",
-      reservation: "**예약된 {game} 내전에 참가할 사람을 기다리고 있어요.**",
+      immediate: "너만 오면 바로 고! 사람 모이면 바로 시작할거야!",
+      reservation: "시간 많네! 다들 미리미리 신청하자!",
     },
     sections: {
       schedule: [
-        "📅 **예정 시간**",
+        "> ### 📅 예정 시간",
         "{scheduledFull} ({scheduledRelative})",
       ],
       details: ["📝 **설명**", "{providedDescription}"],
@@ -93,12 +94,12 @@ export const EMBED_CONFIG: EmbedConfig = {
     queue: {
       enabled: true,
       inline: true,
-      primaryName: "{count}/{limit} 내전",
-      secondName: "{count}/{limit} 내전",
+      primaryName: "{count}/{limit} 대기열",
+      secondName: "{count}/{limit} 대기열",
       waitingName: "대기자",
-      emptyPrimary: "아직 참가자가 없어요.",
-      emptySecond: "다음 참가자를 기다리고 있어요.",
-      emptyWaiting: "현재 대기자가 없어요.",
+      emptyPrimary: "아직 없음",
+      emptySecond: "토너 내전 가보자잇!",
+      emptyWaiting: "사람이 이렇게 많다고?",
     },
 
     // panel과 마찬가지로 author, thumbnail, image, fields, url 등을 추가할 수 있습니다.

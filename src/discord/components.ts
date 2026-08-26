@@ -41,23 +41,23 @@ export function buildRecruitmentButtons(
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(customIds.join(recruitmentId))
-        .setLabel("참가")
+        .setLabel("신청하기")
         .setEmoji("✅")
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
         .setCustomId(customIds.leave(recruitmentId))
-        .setLabel("도망가기")
+        .setLabel("쫄튀하기")
         .setEmoji("🏃")
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
         .setCustomId(customIds.mention(recruitmentId))
-        .setLabel("올 멘션")
+        .setLabel("10명 멘션")
         .setEmoji("📣")
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId(customIds.summon(recruitmentId))
-        .setLabel(summonUsed ? "소환 사용됨" : "올 소환")
-        .setEmoji("🔊")
+        .setLabel(summonUsed ? "소환 사용됨" : "전체 소환")
+        .setEmoji("☎️")
         .setDisabled(summonUsed)
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
@@ -65,7 +65,6 @@ export function buildRecruitmentButtons(
         .setLabel("삭제")
         .setEmoji("🗑️")
         .setStyle(ButtonStyle.Danger),
-    ),
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(customIds.manage(recruitmentId))
@@ -106,13 +105,13 @@ export function buildReservationModal(panelId: number): ModalBuilder {
         label: "협곡",
         value: "RIFT",
         description: "소환사의 협곡 내전",
-        emoji: "🏠",
+        emoji: "<:rift:1541797589827985478> ",
       },
       {
         label: "아람",
         value: "ARAM",
-        description: "칼바람 나락 내전",
-        emoji: "❄️",
+        description: "증강 아람 내전",
+        emoji: "<:aram:1541797572962812104> ",
       },
     )
     .setMinValues(1)
@@ -139,22 +138,22 @@ export function buildReservationModal(panelId: number): ModalBuilder {
       {
         label: "PST — 미국 서부",
         value: "PST",
-        description: "Pacific Time · Los Angeles",
+        description: "California · Nevada · Oregon · Washington 등...",
       },
       {
         label: "EST — 미국 동부",
         value: "EST",
-        description: "Eastern Time · New York",
+        description: "Georgia · New York · Pennsylvania · Virginia 등...",
       },
       {
         label: "CST — 미국 중부",
         value: "CST",
-        description: "Central Time · Chicago",
+        description: "Illinois · Iowa · Minnesota · Mississippi 등...",
       },
       {
-        label: "MT — 미국 산악",
-        value: "MT",
-        description: "Mountain Time · Denver",
+        label: "MST — 미국 산악",
+        value: "MST",
+        description: "Arizona · Colorado · Montana · Utah 등...",
       },
     )
     .setMinValues(1)
@@ -193,7 +192,7 @@ export function buildSummonModal(recruitmentId: number): ModalBuilder {
 
   return new ModalBuilder()
     .setCustomId(customIds.summonModal(recruitmentId))
-    .setTitle("올 소환 최종 확인")
+    .setTitle("전체 소환 최종 확인")
     .addLabelComponents(
       new LabelBuilder()
         .setLabel('확인을 위해 "전부 소환" 입력')

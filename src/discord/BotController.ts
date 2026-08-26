@@ -147,7 +147,7 @@ export class BotController {
       case "panel-reservation": {
         this.requirePanelInteraction(interaction, customId.id);
         if (!isAdministrator(interaction)) {
-          throw new DomainError("예약 내전은 관리자만 만들 수 있어요.", "ADMIN_ONLY");
+          throw new DomainError("현재 내전 예약은 관리자만 가능해요.", "ADMIN_ONLY");
         }
         await interaction.showModal(buildReservationModal(customId.id));
         return;
@@ -168,7 +168,7 @@ export class BotController {
         await this.handleDelete(interaction, customId.id);
         return;
       case "manage":
-        throw new DomainError("관리 기능은 아직 준비 중이에요.", "NOT_IMPLEMENTED");
+        throw new DomainError("해당 기능은 아직 준비중이에요.", "NOT_IMPLEMENTED");
       default:
         return;
     }
@@ -278,7 +278,7 @@ export class BotController {
   ): Promise<void> {
     const panel = this.requirePanelInteraction(interaction, panelId);
     if (!isAdministrator(interaction)) {
-      throw new DomainError("예약 내전은 관리자만 만들 수 있어요.", "ADMIN_ONLY");
+      throw new DomainError("현재 내전 예약은 관리자만 가능해요", "ADMIN_ONLY");
     }
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -355,7 +355,7 @@ export class BotController {
       throw error;
     }
 
-    await interaction.editReply(`모집 채널을 만들었어요: <#${channel.id}>`);
+    await interaction.editReply(`내전 대기열이 성공적으로 생성되었어요!: <#${channel.id}>`);
   }
 
   private async handleJoin(interaction: ButtonInteraction, recruitmentId: number): Promise<void> {
@@ -383,7 +383,7 @@ export class BotController {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     this.repository.removeQueueMember(recruitment.id, interaction.user.id);
     const refreshWarning = await this.stateService.tryRefreshRecruitmentMessage(recruitment.id);
-    await interaction.editReply(`대기열에서 나왔어요.${refreshWarning}`);
+    await interaction.editReply(`이걸 쫄튀하네 ㅋ.${refreshWarning}`);
   }
 
   private async handleMention(interaction: ButtonInteraction, recruitmentId: number): Promise<void> {
