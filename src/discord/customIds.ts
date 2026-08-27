@@ -1,3 +1,5 @@
+import type { GameType } from "../domain/models.js";
+
 const PREFIX = "crq";
 
 export const customIds = {
@@ -5,6 +7,8 @@ export const customIds = {
   panelRift: (panelId: number) => `${PREFIX}:panel:rift:${panelId}`,
   panelAram: (panelId: number) => `${PREFIX}:panel:aram:${panelId}`,
   panelReservation: (panelId: number) => `${PREFIX}:panel:reservation:${panelId}`,
+  immediateModal: (panelId: number, gameType: GameType) =>
+    `${PREFIX}:immediate:${gameType.toLowerCase()}:${panelId}`,
   reservationModal: (panelId: number) => `${PREFIX}:reservation:${panelId}`,
   join: (recruitmentId: number) => `${PREFIX}:join:${recruitmentId}`,
   leave: (recruitmentId: number) => `${PREFIX}:leave:${recruitmentId}`,
@@ -18,6 +22,7 @@ export const customIds = {
 export type ParsedCustomId =
   | { action: "setup" }
   | { action: "panel-rift" | "panel-aram" | "panel-reservation"; id: number }
+  | { action: "immediate"; id: number; gameType: GameType }
   | { action: "reservation"; id: number }
   | {
       action: "join" | "leave" | "mention" | "summon" | "delete" | "manage";
@@ -38,6 +43,15 @@ export function parseCustomId(value: string): ParsedCustomId | null {
   }
   if (parts[1] === "reservation" && Number.isSafeInteger(id) && id > 0) {
     return { action: "reservation", id };
+  }
+  if (
+    parts[1] === "immediate" &&
+    parts.length === 4 &&
+    Number.isSafeInteger(id) &&
+    id > 0
+  ) {
+    if (parts[2] === "rift") return { action: "immediate", id, gameType: "RIFT" };
+    if (parts[2] === "aram") return { action: "immediate", id, gameType: "ARAM" };
   }
   if (
     parts[1] === "summon-confirm" &&

@@ -120,7 +120,7 @@ describe("SqliteRecruitmentRepository", () => {
     repository.close();
   });
 
-  it("assigns the smallest available number across open Rift and ARAM rooms", () => {
+  it("assigns and reuses the smallest available number separately per game", () => {
     const repository = new SqliteRecruitmentRepository(":memory:");
     const first = createOpenRecruitment(repository);
     const secondClaim = repository.claimRecruitment({
@@ -154,28 +154,45 @@ describe("SqliteRecruitmentRepository", () => {
 
     expect(first.channelNumber).toBe(1);
     expect(second.channelNumber).toBe(2);
-    expect(aram.channelNumber).toBe(3);
+    expect(aram.channelNumber).toBe(1);
 
-    repository.closeRecruitment(second.id, 5);
-    const reused = repository.claimRecruitment({
+    const secondAram = repository.claimRecruitment({
       panelId: first.panelId,
       guildId: first.guildId,
       categoryId: first.categoryId,
       creatorId: "user-4",
+      kind: "ARAM_NOW",
+      gameType: "ARAM",
+      now: 5,
+    });
+    expect(secondAram.channelNumber).toBe(2);
+    repository.activateRecruitment(
+      secondAram.id,
+      "recruitment-channel-4",
+      "recruitment-message-4",
+    );
+
+    repository.closeRecruitment(second.id, 6);
+    const reused = repository.claimRecruitment({
+      panelId: first.panelId,
+      guildId: first.guildId,
+      categoryId: first.categoryId,
+      creatorId: "user-5",
       kind: "RIFT_NOW",
       gameType: "RIFT",
-      now: 6,
+      now: 7,
     });
     expect(reused.channelNumber).toBe(2);
 
     repository.activateRecruitment(
       reused.id,
-      "recruitment-channel-4",
-      "recruitment-message-4",
+      "recruitment-channel-5",
+      "recruitment-message-5",
     );
-    repository.closeRecruitment(first.id, 7);
-    repository.closeRecruitment(aram.id, 7);
-    repository.closeRecruitment(reused.id, 7);
+    repository.closeRecruitment(first.id, 8);
+    repository.closeRecruitment(aram.id, 8);
+    repository.closeRecruitment(secondAram.id, 8);
+    repository.closeRecruitment(reused.id, 8);
     const reset = repository.claimRecruitment({
       panelId: first.panelId,
       guildId: first.guildId,
@@ -183,7 +200,7 @@ describe("SqliteRecruitmentRepository", () => {
       creatorId: "user-1",
       kind: "RIFT_NOW",
       gameType: "RIFT",
-      now: 8,
+      now: 9,
     });
     expect(reset.channelNumber).toBe(1);
     repository.close();
@@ -267,13 +284,78 @@ describe("SqliteRecruitmentRepository", () => {
         (1, 'guild-1', 'category-1', 'channel-1', 'message-1', 'user-1', 'RIFT_NOW',
          'RIFT', 'OPEN', 'AVAILABLE', 2),
         (1, 'guild-1', 'category-1', 'channel-2', 'message-2', 'user-2', 'RIFT_NOW',
-         'RIFT', 'OPEN', 'AVAILABLE', 3);
+         'RIFT', 'OPEN', 'AVAILABLE', 3),
+        (1, 'guild-1', 'category-1', 'channel-3', 'message-3', 'user-3', 'ARAM_NOW',
+         'ARAM', 'OPEN', 'AVAILABLE', 4);
     `);
     oldDatabase.close();
 
     const repository = new SqliteRecruitmentRepository(databasePath);
     expect(repository.getRecruitment(1)?.channelNumber).toBe(1);
     expect(repository.getRecruitment(2)?.channelNumber).toBe(2);
+    expect(repository.getRecruitment(3)?.channelNumber).toBe(1);
+    repository.close();
+  });
+
+  it("migrates shared Rift/ARAM channel numbers to separate sequences", () => {
+    const directory = mkdtempSync(join(tmpdir(), "cr-inhouse-number-split-test-"));
+    const databasePath = join(directory, "state.sqlite");
+    const oldDatabase = new DatabaseSync(databasePath);
+    oldDatabase.exec(`
+      CREATE TABLE panels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        category_id TEXT NOT NULL,
+        channel_id TEXT UNIQUE,
+        message_id TEXT,
+        creator_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        closed_at INTEGER
+      );
+      CREATE TABLE recruitments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        panel_id INTEGER NOT NULL REFERENCES panels(id),
+        guild_id TEXT NOT NULL,
+        category_id TEXT NOT NULL,
+        channel_id TEXT UNIQUE,
+        message_id TEXT,
+        creator_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        game_type TEXT NOT NULL,
+        channel_number INTEGER,
+        description TEXT,
+        scheduled_at INTEGER,
+        timezone_input TEXT,
+        status TEXT NOT NULL,
+        summon_state TEXT NOT NULL DEFAULT 'AVAILABLE',
+        created_at INTEGER NOT NULL,
+        closed_at INTEGER
+      );
+      CREATE UNIQUE INDEX uq_recruitments_active_channel_number
+        ON recruitments(guild_id, category_id, channel_number)
+        WHERE channel_number IS NOT NULL AND status IN ('CREATING', 'OPEN');
+      INSERT INTO panels
+        (guild_id, category_id, channel_id, message_id, creator_id, status, created_at)
+      VALUES
+        ('guild-1', 'category-1', 'panel-channel-1', 'panel-message-1', 'admin-1', 'ACTIVE', 1);
+      INSERT INTO recruitments
+        (panel_id, guild_id, category_id, channel_id, message_id, creator_id, kind,
+         game_type, channel_number, status, summon_state, created_at)
+      VALUES
+        (1, 'guild-1', 'category-1', 'channel-1', 'message-1', 'user-1', 'RIFT_NOW',
+         'RIFT', 1, 'OPEN', 'AVAILABLE', 2),
+        (1, 'guild-1', 'category-1', 'channel-2', 'message-2', 'user-2', 'RIFT_NOW',
+         'RIFT', 2, 'OPEN', 'AVAILABLE', 3),
+        (1, 'guild-1', 'category-1', 'channel-3', 'message-3', 'user-3', 'ARAM_NOW',
+         'ARAM', 3, 'OPEN', 'AVAILABLE', 4);
+    `);
+    oldDatabase.close();
+
+    const repository = new SqliteRecruitmentRepository(databasePath);
+    expect(repository.getRecruitment(1)?.channelNumber).toBe(1);
+    expect(repository.getRecruitment(2)?.channelNumber).toBe(2);
+    expect(repository.getRecruitment(3)?.channelNumber).toBe(1);
     repository.close();
   });
 

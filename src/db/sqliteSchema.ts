@@ -73,7 +73,7 @@ const CHANNEL_NUMBER_MIGRATION = `
   WITH numbered AS (
     SELECT id,
            ROW_NUMBER() OVER (
-             PARTITION BY guild_id, category_id
+             PARTITION BY guild_id, category_id, game_type
              ORDER BY id
            ) AS next_number
     FROM recruitments
@@ -86,7 +86,7 @@ const CHANNEL_NUMBER_MIGRATION = `
   WHERE id IN (SELECT id FROM numbered);
 
   CREATE UNIQUE INDEX uq_recruitments_active_channel_number
-    ON recruitments(guild_id, category_id, channel_number)
+    ON recruitments(guild_id, category_id, game_type, channel_number)
     WHERE channel_number IS NOT NULL AND status IN ('CREATING', 'OPEN');
 `;
 

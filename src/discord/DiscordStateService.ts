@@ -3,7 +3,7 @@ import type { AppConfig } from "../config.js";
 import type { RecruitmentRepository } from "../db/repository.js";
 import type { Panel, Recruitment } from "../domain/models.js";
 import { buildRecruitmentChannelName } from "../services/channelNames.js";
-import { RECRUITMENT_THREAD_NAME } from "./constants.js";
+import { PANEL_CHANNEL_NAME, RECRUITMENT_THREAD_NAME } from "./constants.js";
 import { isUnknownChannel, isUnknownMessage } from "./discordErrors.js";
 import {
   buildPanelMessagePayload,
@@ -75,6 +75,9 @@ export class DiscordStateService {
       if (!channel || channel.type !== ChannelType.GuildText) {
         this.repository.closePanelByChannel(panel.channelId, Date.now());
         return;
+      }
+      if (channel.name !== PANEL_CHANNEL_NAME) {
+        await channel.setName(PANEL_CHANNEL_NAME, "내전 만들기 채널 이름 동기화");
       }
 
       const payload = buildPanelMessagePayload(panel);

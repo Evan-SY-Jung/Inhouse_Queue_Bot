@@ -117,7 +117,11 @@ export class SqliteRecruitmentRepository implements RecruitmentRepository {
         const channelNumber =
           input.kind === "RESERVATION"
             ? null
-            : this.nextOpenChannelNumber(input.guildId, input.categoryId);
+            : this.nextOpenChannelNumber(
+                input.guildId,
+                input.categoryId,
+                input.gameType,
+              );
         const result = this.db
           .prepare(
             `INSERT INTO recruitments (
@@ -357,18 +361,23 @@ export class SqliteRecruitmentRepository implements RecruitmentRepository {
     this.db.close();
   }
 
-  private nextOpenChannelNumber(guildId: string, categoryId: string): number {
+  private nextOpenChannelNumber(
+    guildId: string,
+    categoryId: string,
+    gameType: Recruitment["gameType"],
+  ): number {
     const usedNumbers = new Set(
       this.db
         .prepare(
           `SELECT channel_number
            FROM recruitments
            WHERE guild_id = ? AND category_id = ?
+             AND game_type = ?
              AND kind IN ('RIFT_NOW', 'ARAM_NOW')
              AND status IN ('CREATING', 'OPEN')
              AND channel_number IS NOT NULL`,
         )
-        .all(guildId, categoryId)
+        .all(guildId, categoryId, gameType)
         .map((row) => Number((row as SqlRow).channel_number)),
     );
 

@@ -1,4 +1,4 @@
-export const PANEL_CHANNEL_NAME = "내전-모집";
+export const PANEL_CHANNEL_NAME = "👊ㆍ내전-만들기";
 export const RECRUITMENT_THREAD_NAME = "💬ㆍ내전 채팅";
 export const MENTION_MESSAGE_LIFETIME_MS = 14_000;
 export const ALL_MENTION_COOLDOWN_KEY = "ALL_MENTION";

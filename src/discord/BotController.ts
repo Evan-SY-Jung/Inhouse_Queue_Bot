@@ -20,7 +20,6 @@ import type {
   GameType,
   Panel,
   Recruitment,
-  RecruitmentKind,
 } from "../domain/models.js";
 import type { RecruitmentRepository } from "../db/repository.js";
 import { buildRecruitmentChannelName } from "../services/channelNames.js";
@@ -33,6 +32,11 @@ import {
   ReservationTimeError,
 } from "../services/reservationTime.js";
 import {
+  parseImmediateStartDelay,
+  scheduledAtFromDelay,
+} from "../services/immediateStart.js";
+import {
+  buildImmediateRecruitmentModal,
   buildReservationModal,
   buildSetupModal,
   buildSummonModal,
@@ -139,10 +143,10 @@ export class BotController {
 
     switch (customId.action) {
       case "panel-rift":
-        await this.handleImmediateRecruitment(interaction, customId.id, "RIFT_NOW", "RIFT");
+        await this.handleImmediateRecruitmentButton(interaction, customId.id, "RIFT");
         return;
       case "panel-aram":
-        await this.handleImmediateRecruitment(interaction, customId.id, "ARAM_NOW", "ARAM");
+        await this.handleImmediateRecruitmentButton(interaction, customId.id, "ARAM");
         return;
       case "panel-reservation": {
         this.requirePanelInteraction(interaction, customId.id);
@@ -181,6 +185,13 @@ export class BotController {
     switch (customId.action) {
       case "setup":
         await this.handleSetupModal(interaction);
+        return;
+      case "immediate":
+        await this.handleImmediateRecruitmentModal(
+          interaction,
+          customId.id,
+          customId.gameType,
+        );
         return;
       case "reservation":
         await this.handleReservationModal(interaction, customId.id);
@@ -253,22 +264,43 @@ export class BotController {
     await interaction.editReply(`내전 모집 패널을 만들었어요: <#${channel.id}>`);
   }
 
-  private async handleImmediateRecruitment(
+  private async handleImmediateRecruitmentButton(
     interaction: ButtonInteraction,
     panelId: number,
-    kind: RecruitmentKind,
+    gameType: GameType,
+  ): Promise<void> {
+    this.requirePanelInteraction(interaction, panelId);
+    await interaction.showModal(buildImmediateRecruitmentModal(panelId, gameType));
+  }
+
+  private async handleImmediateRecruitmentModal(
+    interaction: ModalSubmitInteraction,
+    panelId: number,
     gameType: GameType,
   ): Promise<void> {
     const panel = this.requirePanelInteraction(interaction, panelId);
+    const selectedDelay = interaction.fields.getStringSelectValues("start_delay")[0];
+    const delayMinutes = parseImmediateStartDelay(selectedDelay);
+    if (selectedDelay && delayMinutes === null) {
+      throw new DomainError(
+        "시작 시간은 제공된 분 단위 옵션에서 선택해 주세요.",
+        "INVALID_START_DELAY",
+      );
+    }
+    const description = interaction.fields.getTextInputValue("description").trim();
+    const now = Date.now();
+
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     await this.createRecruitment(interaction, panel, {
       panelId: panel.id,
       guildId: panel.guildId,
       categoryId: panel.categoryId,
       creatorId: interaction.user.id,
-      kind,
+      kind: gameType === "RIFT" ? "RIFT_NOW" : "ARAM_NOW",
       gameType,
-      now: Date.now(),
+      description: description || null,
+      scheduledAt: scheduledAtFromDelay(now, delayMinutes),
+      now,
     });
   }
 

@@ -8,6 +8,8 @@ import {
   TextInputBuilder,
   TextInputStyle,
 } from "discord.js";
+import type { GameType } from "../domain/models.js";
+import { IMMEDIATE_START_DELAY_MINUTES } from "../services/immediateStart.js";
 import { customIds } from "./customIds.js";
 import { SUMMON_CONFIRMATION_TEXT } from "./constants.js";
 
@@ -97,6 +99,38 @@ export function buildSetupModal(): ModalBuilder {
     .addLabelComponents(categoryLabel);
 }
 
+export function buildImmediateRecruitmentModal(
+  panelId: number,
+  gameType: GameType,
+): ModalBuilder {
+  const startDelay = new StringSelectMenuBuilder()
+    .setCustomId("start_delay")
+    .setPlaceholder("시작 시간을 정하지 않음")
+    .addOptions(
+      IMMEDIATE_START_DELAY_MINUTES.map((minutes) => ({
+        label: `${minutes}분 뒤`,
+        value: String(minutes),
+        description: `지금부터 ${minutes}분 뒤에 시작`,
+      })),
+    )
+    .setMinValues(0)
+    .setMaxValues(1)
+    .setRequired(false);
+
+  return new ModalBuilder()
+    .setCustomId(customIds.immediateModal(panelId, gameType))
+    .setTitle(`${gameType === "RIFT" ? "협곡" : "아람"} 대기열 만들기`)
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel("시작까지 남은 시간 (선택)")
+        .setDescription("설정하면 각 사용자에게 현지 시간으로 표시됩니다.")
+        .setStringSelectMenuComponent(startDelay),
+      new LabelBuilder()
+        .setLabel("내전 설명 (선택)")
+        .setTextInputComponent(buildDescriptionInput()),
+    );
+}
+
 export function buildReservationModal(panelId: number): ModalBuilder {
   const gameType = new StringSelectMenuBuilder()
     .setCustomId("game_type")
@@ -152,21 +186,14 @@ export function buildReservationModal(panelId: number): ModalBuilder {
         description: "Illinois · Iowa · Minnesota · Mississippi 등...",
       },
       {
-        label: "MST — 미국 산악",
-        value: "MST",
+        label: "MT — 미국 산악",
+        value: "MT",
         description: "Arizona · Colorado · Montana · Utah 등...",
       },
     )
     .setMinValues(1)
     .setMaxValues(1)
     .setRequired(true);
-  const description = new TextInputBuilder()
-    .setCustomId("description")
-    .setPlaceholder("티어 제한, 진행 방식 등")
-    .setMaxLength(1_000)
-    .setRequired(false)
-    .setStyle(TextInputStyle.Paragraph);
-
   return new ModalBuilder()
     .setCustomId(customIds.reservationModal(panelId))
     .setTitle("내전 예약")
@@ -178,7 +205,9 @@ export function buildReservationModal(panelId: number): ModalBuilder {
         .setLabel("타임존")
         .setDescription("예약 시간은 다른 사람의 Discord에서 각자 현지 시간으로 표시됩니다.")
         .setStringSelectMenuComponent(timezone),
-      new LabelBuilder().setLabel("내전 설명 (선택)").setTextInputComponent(description),
+      new LabelBuilder()
+        .setLabel("내전 설명 (선택)")
+        .setTextInputComponent(buildDescriptionInput()),
     );
 }
 
@@ -199,4 +228,13 @@ export function buildSummonModal(recruitmentId: number): ModalBuilder {
         .setLabel('확인을 위해 "전부 소환" 입력')
         .setTextInputComponent(confirmation),
     );
+}
+
+function buildDescriptionInput(): TextInputBuilder {
+  return new TextInputBuilder()
+    .setCustomId("description")
+    .setPlaceholder("티어 제한, 진행 방식 등")
+    .setMaxLength(1_000)
+    .setRequired(false)
+    .setStyle(TextInputStyle.Paragraph);
 }

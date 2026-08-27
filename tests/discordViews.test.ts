@@ -6,13 +6,17 @@ import { buildRecruitmentChannelName } from "../src/services/channelNames.js";
 import { customIds, parseCustomId } from "../src/discord/customIds.js";
 import { buildPanelEmbed, buildRecruitmentEmbed } from "../src/discord/embeds.js";
 import {
+  buildImmediateRecruitmentModal,
   buildRecruitmentButtons,
   buildReservationModal,
   buildSetupModal,
   buildSummonModal,
 } from "../src/discord/components.js";
 import { applicationCommands } from "../src/discord/commands.js";
-import { SUMMON_VOICE_CHANNEL_ID } from "../src/discord/constants.js";
+import {
+  PANEL_CHANNEL_NAME,
+  SUMMON_VOICE_CHANNEL_ID,
+} from "../src/discord/constants.js";
 import { buildRecruitmentPermissionOverwrites } from "../src/discord/helpers.js";
 
 const recruitment: Recruitment = {
@@ -62,12 +66,12 @@ describe("Discord views", () => {
     ).toJSON();
 
     expect(empty.fields).toHaveLength(1);
-    expect(empty.fields?.[0]?.name).toBe("0/10 내전");
+    expect(empty.fields?.[0]?.name).toBe("0/10 대기열");
     expect(ten.fields).toHaveLength(2);
-    expect(ten.fields?.[1]?.name).toBe("10/20 내전");
+    expect(ten.fields?.[1]?.name).toBe("10/20 대기열");
     expect(embed.fields).toHaveLength(3);
-    expect(embed.fields?.[0]?.name).toBe("10/10 내전");
-    expect(embed.fields?.[1]?.name).toBe("20/20 내전");
+    expect(embed.fields?.[0]?.name).toBe("10/10 대기열");
+    expect(embed.fields?.[1]?.name).toBe("20/20 대기열");
     expect(embed.fields?.[2]?.name).toBe("대기자");
     expect(embed.fields?.[0]?.value).toContain("<@600000000000000001>");
     expect(embed.fields?.[0]?.value).not.toContain("<@600000000000000011>");
@@ -75,6 +79,32 @@ describe("Discord views", () => {
     expect(embed.fields?.[2]?.value).toContain("<@600000000000000021>");
     expect(embed.description).toContain("<t:1800000000:F>");
     expect(embed.color).toBe(0x57f287);
+  });
+
+  it("shows local-time and description sections for immediate queues only when provided", () => {
+    const configured = buildRecruitmentEmbed(
+      { ...recruitment, kind: "RIFT_NOW", channelNumber: 1 },
+      [],
+      10,
+      20,
+    ).toJSON();
+    const plain = buildRecruitmentEmbed(
+      {
+        ...recruitment,
+        kind: "RIFT_NOW",
+        channelNumber: 1,
+        scheduledAt: null,
+        description: null,
+      },
+      [],
+      10,
+      20,
+    ).toJSON();
+
+    expect(configured.description).toContain("<t:1800000000:F>");
+    expect(configured.description).toContain("골드 이하");
+    expect(plain.description).not.toContain("<t:");
+    expect(plain.description).not.toContain("골드 이하");
   });
 
   it("accepts optional standard embed properties and ignores unknown additions", () => {
@@ -208,21 +238,47 @@ describe("Discord views", () => {
       action: "panel-reservation",
       id: 3,
     });
+    expect(parseCustomId(customIds.immediateModal(3, "ARAM"))).toEqual({
+      action: "immediate",
+      id: 3,
+      gameType: "ARAM",
+    });
     expect(parseCustomId(customIds.summonModal(7))).toEqual({
       action: "summon-confirm",
       id: 7,
     });
   });
 
-  it("builds numbered immediate names and local-date reservation names", () => {
+  it("builds per-game lettered queue names and local-date reservation names", () => {
     expect(
       buildRecruitmentChannelName({
         ...recruitment,
         kind: "RIFT_NOW",
         channelNumber: 2,
       }),
-    ).toBe("🏠ㆍ협곡 내전 2");
-    expect(buildRecruitmentChannelName(recruitment)).toBe("⏰ㆍ01월 15일 내전");
+    ).toBe("🏠ㆍ협곡대기열🄑");
+    expect(
+      buildRecruitmentChannelName({
+        ...recruitment,
+        kind: "ARAM_NOW",
+        gameType: "ARAM",
+        channelNumber: 1,
+      }),
+    ).toBe("🏠ㆍ아람대기열🄐");
+    expect(buildRecruitmentChannelName(recruitment)).toBe(
+      "⏰ㆍ협곡예약❨01∕15❩",
+    );
+    expect(PANEL_CHANNEL_NAME).toBe("👊ㆍ내전-만들기");
+
+    for (let number = 1; number <= 26; number += 1) {
+      expect(
+        buildRecruitmentChannelName({
+          ...recruitment,
+          kind: "RIFT_NOW",
+          channelNumber: number,
+        }),
+      ).toBe(`🏠ㆍ협곡대기열${String.fromCodePoint(0x1f110 + number - 1)}`);
+    }
 
     const aram = buildRecruitmentEmbed(
       { ...recruitment, gameType: "ARAM" },
@@ -243,10 +299,34 @@ describe("Discord views", () => {
 
   it("builds required setup/reservation/confirmation modal fields", () => {
     const setup = buildSetupModal().toJSON();
+    const immediate = buildImmediateRecruitmentModal(1, "RIFT").toJSON();
     const reservation = buildReservationModal(1).toJSON();
     const summon = buildSummonModal(7).toJSON();
 
     expect(setup.components).toHaveLength(1);
+    expect(immediate.custom_id).toBe("crq:immediate:rift:1");
+    expect(immediate.components).toHaveLength(2);
+    expect(immediate.components[0]).toMatchObject({
+      component: {
+        custom_id: "start_delay",
+        min_values: 0,
+        max_values: 1,
+        required: false,
+        options: [
+          expect.objectContaining({ value: "10" }),
+          expect.objectContaining({ value: "15" }),
+          expect.objectContaining({ value: "20" }),
+          expect.objectContaining({ value: "30" }),
+          expect.objectContaining({ value: "45" }),
+          expect.objectContaining({ value: "60" }),
+          expect.objectContaining({ value: "90" }),
+          expect.objectContaining({ value: "120" }),
+        ],
+      },
+    });
+    expect(immediate.components[1]).toMatchObject({
+      component: { custom_id: "description", required: false },
+    });
     expect(reservation.components).toHaveLength(5);
     expect(reservation.components[0]).toMatchObject({
       component: {
