@@ -19,12 +19,12 @@ export function buildPanelButtons(panelId: number): ActionRowBuilder<ButtonBuild
       new ButtonBuilder()
         .setCustomId(customIds.panelRift(panelId))
         .setLabel("협곡 내전 모집")
-        .setEmoji("🐂")
+        .setEmoji("<:rift:1541797589827985478>")
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
         .setCustomId(customIds.panelAram(panelId))
         .setLabel("아람 내전 모집")
-        .setEmoji("❄️")
+        .setEmoji("<:aram:1541797572962812104>")
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
         .setCustomId(customIds.panelReservation(panelId))
