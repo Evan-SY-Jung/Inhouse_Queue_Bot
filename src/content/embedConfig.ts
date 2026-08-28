@@ -68,6 +68,7 @@ export const EMBED_CONFIG: EmbedConfig = {
       "> ### **👑 내전 주최자** \n바로... ||{creatorMention}||",
       "",
       "{scheduleSection}",
+      "",
       "{descriptionSection}",
       "‎ ",
     ],
@@ -84,7 +85,7 @@ export const EMBED_CONFIG: EmbedConfig = {
         "> ### 📅 예정 시간",
         "{scheduledFull} ({scheduledRelative})",
       ],
-      details: ["📝 **설명**", "{providedDescription}"],
+      details: ["> ### 📖 **정보**", "{providedDescription}"],
     },
     summonFooterTexts: {
       available: "생성자/관리자만 삭제 및 소환 가능",
