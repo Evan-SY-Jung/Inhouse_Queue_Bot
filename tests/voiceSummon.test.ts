@@ -4,10 +4,10 @@ import type { QueueMember } from "../src/domain/models.js";
 import { moveQueueMembersToVoiceChannel } from "../src/discord/voiceSummon.js";
 
 describe("voice summon", () => {
-  it("moves every queued member when fewer than the ten-person limit are queued", async () => {
+  it("moves only the earliest members within the resolved target limit", async () => {
     const movedIds: string[] = [];
     const target = { id: "target-voice" } as VoiceChannel;
-    const members = Array.from({ length: 3 }, (_, index) => ({
+    const members = Array.from({ length: 22 }, (_, index) => ({
       sequence: index + 1,
       recruitmentId: 1,
       userId: `member-${index + 1}`,
@@ -39,11 +39,13 @@ describe("voice summon", () => {
       guild,
       target,
       members,
-      limit: 10,
+      limit: 20,
       reason: "test",
     });
 
-    expect(movedIds).toEqual(["member-1", "member-2", "member-3"]);
+    expect(movedIds).toEqual(
+      Array.from({ length: 20 }, (_, index) => `member-${index + 1}`),
+    );
     expect(result).toEqual({
       movedIds,
       notConnected: 0,

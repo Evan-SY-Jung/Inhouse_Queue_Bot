@@ -14,3 +14,12 @@ export function firstQueueMemberIds(members: QueueMember[], limit: number): stri
   return members.slice(0, limit).map((member) => member.userId);
 }
 
+export function resolveSummonTargetLimit(
+  memberCount: number,
+  callSize: number,
+  capacity: number,
+): number {
+  if (memberCount >= capacity) return capacity;
+  if (memberCount >= callSize) return callSize;
+  return 0;
+}

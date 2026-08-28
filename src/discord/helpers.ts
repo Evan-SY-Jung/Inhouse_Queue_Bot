@@ -31,6 +31,7 @@ export function assertBotCanCreateRecruitments(category: CategoryChannel, me: Gu
     PermissionFlagsBits.ReadMessageHistory,
     PermissionFlagsBits.ManageChannels,
     PermissionFlagsBits.ManageRoles,
+    PermissionFlagsBits.MentionEveryone,
     PermissionFlagsBits.CreatePublicThreads,
     PermissionFlagsBits.SendMessagesInThreads,
   ];
@@ -105,6 +106,7 @@ export function buildRecruitmentPermissionOverwrites(
     PermissionFlagsBits.ViewChannel,
     PermissionFlagsBits.SendMessages,
     PermissionFlagsBits.EmbedLinks,
+    PermissionFlagsBits.MentionEveryone,
     PermissionFlagsBits.ReadMessageHistory,
     PermissionFlagsBits.CreatePublicThreads,
     PermissionFlagsBits.SendMessagesInThreads,

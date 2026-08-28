@@ -18,6 +18,10 @@ import {
   SUMMON_VOICE_CHANNEL_ID,
 } from "../src/discord/constants.js";
 import { buildRecruitmentPermissionOverwrites } from "../src/discord/helpers.js";
+import {
+  buildInitialRecruitmentMessagePayload,
+  buildRecruitmentMessagePayload,
+} from "../src/discord/messagePayloads.js";
 
 const recruitment: Recruitment = {
   id: 7,
@@ -377,6 +381,42 @@ describe("Discord views", () => {
     );
     expect(everyoneAllow).toBe(PermissionFlagsBits.SendMessagesInThreads);
     expect(botAllow & PermissionFlagsBits.SendMessages).toBe(PermissionFlagsBits.SendMessages);
+    expect(botAllow & PermissionFlagsBits.MentionEveryone).toBe(
+      PermissionFlagsBits.MentionEveryone,
+    );
+  });
+
+  it("mentions @here outside the embed only on the initial recruitment message", () => {
+    const initial = buildInitialRecruitmentMessagePayload(recruitment, [], {
+      callSize: 10,
+      queueCapacity: 20,
+    });
+    const refresh = buildRecruitmentMessagePayload(recruitment, [], {
+      callSize: 10,
+      queueCapacity: 20,
+    });
+
+    expect(initial.content).toBe("||@here||");
+    expect(initial.allowedMentions).toEqual({ parse: ["everyone"] });
+    expect("content" in refresh).toBe(false);
+    expect(refresh.allowedMentions).toEqual({ parse: [] });
+  });
+
+  it("enables summon only when a complete group is queued", () => {
+    const summonButton = (memberCount: number) => {
+      const payload = buildRecruitmentMessagePayload(
+        recruitment,
+        Array.from({ length: memberCount }, (_, index) => member(index + 1)),
+        { callSize: 10, queueCapacity: 20 },
+      );
+      return payload.components[0]?.toJSON().components[3];
+    };
+
+    expect(summonButton(9)).toMatchObject({ label: "전체 소환", disabled: true });
+    expect(summonButton(10)).toMatchObject({ label: "전체 소환", disabled: false });
+    expect(summonButton(13)).toMatchObject({ label: "전체 소환", disabled: false });
+    expect(summonButton(20)).toMatchObject({ label: "전체 소환", disabled: false });
+    expect(summonButton(22)).toMatchObject({ label: "전체 소환", disabled: false });
   });
 
   it("keeps management disabled and disables summon after use", () => {

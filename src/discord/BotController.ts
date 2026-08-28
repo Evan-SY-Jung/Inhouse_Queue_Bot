@@ -26,6 +26,7 @@ import { buildRecruitmentChannelName } from "../services/channelNames.js";
 import {
   firstQueueMemberIds,
   formatQueuePosition,
+  resolveSummonTargetLimit,
 } from "../services/queuePresentation.js";
 import {
   parseReservationTime,
@@ -60,8 +61,8 @@ import {
   parseSnowflake,
 } from "./helpers.js";
 import {
+  buildInitialRecruitmentMessagePayload,
   buildPanelMessagePayload,
-  buildRecruitmentMessagePayload,
 } from "./messagePayloads.js";
 import {
   moveQueueMembersToVoiceChannel,
@@ -373,7 +374,7 @@ export class BotController {
         ),
       });
       const message = await channel.send(
-        buildRecruitmentMessagePayload(recruitment, [], this.config),
+        buildInitialRecruitmentMessagePayload(recruitment, [], this.config),
       );
       await message.startThread({
         name: RECRUITMENT_THREAD_NAME,
@@ -461,9 +462,7 @@ export class BotController {
       throw new DomainError("올 소환은 이 모집에서 이미 사용됐어요.", "SUMMON_ALREADY_USED");
     }
     const members = this.repository.listQueueMembers(recruitment.id);
-    if (members.length === 0) {
-      throw new DomainError("대기열에 소환할 참가자가 없어요.", "NOT_ENOUGH_MEMBERS");
-    }
+    this.requireSummonTargetLimit(members.length);
 
     const guild = this.requireGuild(interaction);
     await this.requireSummonVoiceChannel(guild);
@@ -503,9 +502,7 @@ export class BotController {
     }
 
     const queue = this.repository.listQueueMembers(recruitment.id);
-    if (queue.length === 0) {
-      throw new DomainError("대기열에 소환할 참가자가 없어요.", "NOT_ENOUGH_MEMBERS");
-    }
+    const summonLimit = this.requireSummonTargetLimit(queue.length);
     if (!this.repository.tryClaimSummon(recruitment.id)) {
       throw new DomainError("올 소환이 이미 사용됐거나 현재 처리 중이에요.", "SUMMON_ALREADY_USED");
     }
@@ -516,7 +513,7 @@ export class BotController {
         guild,
         target,
         members: queue,
-        limit: this.config.callSize,
+        limit: summonLimit,
         reason: `내전 모집 #${recruitment.id} 올 소환`,
       });
       if (summonResult.movedIds.length > 0) {
@@ -622,6 +619,21 @@ export class BotController {
         "CREATOR_OR_ADMIN_ONLY",
       );
     }
+  }
+
+  private requireSummonTargetLimit(memberCount: number): number {
+    const limit = resolveSummonTargetLimit(
+      memberCount,
+      this.config.callSize,
+      this.config.queueCapacity,
+    );
+    if (limit === 0) {
+      throw new DomainError(
+        `올 소환은 대기열이 최소 ${this.config.callSize}명 채워졌을 때 사용할 수 있어요. 현재 ${memberCount}명이에요.`,
+        "NOT_ENOUGH_MEMBERS",
+      );
+    }
+    return limit;
   }
 
   private requireGuild<T extends Interaction>(interaction: T): Guild {

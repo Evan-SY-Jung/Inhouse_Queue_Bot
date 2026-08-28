@@ -3,6 +3,7 @@ import type { QueueMember } from "../src/domain/models.js";
 import {
   firstQueueMemberIds,
   formatQueuePosition,
+  resolveSummonTargetLimit,
 } from "../src/services/queuePresentation.js";
 
 describe("queue presentation", () => {
@@ -29,5 +30,15 @@ describe("queue presentation", () => {
       "member-2",
       "member-3",
     ]);
+  });
+
+  it("unlocks only complete 10- or 20-player summon groups", () => {
+    expect(resolveSummonTargetLimit(0, 10, 20)).toBe(0);
+    expect(resolveSummonTargetLimit(9, 10, 20)).toBe(0);
+    expect(resolveSummonTargetLimit(10, 10, 20)).toBe(10);
+    expect(resolveSummonTargetLimit(13, 10, 20)).toBe(10);
+    expect(resolveSummonTargetLimit(19, 10, 20)).toBe(10);
+    expect(resolveSummonTargetLimit(20, 10, 20)).toBe(20);
+    expect(resolveSummonTargetLimit(22, 10, 20)).toBe(20);
   });
 });

@@ -38,6 +38,7 @@ export function buildPanelButtons(panelId: number): ActionRowBuilder<ButtonBuild
 export function buildRecruitmentButtons(
   recruitmentId: number,
   summonUsed = false,
+  summonReady = false,
 ): ActionRowBuilder<ButtonBuilder>[] {
   return [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -60,7 +61,7 @@ export function buildRecruitmentButtons(
         .setCustomId(customIds.summon(recruitmentId))
         .setLabel(summonUsed ? "소환 사용됨" : "전체 소환")
         .setEmoji("☎️")
-        .setDisabled(summonUsed)
+        .setDisabled(summonUsed || !summonReady)
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
         .setCustomId(customIds.delete(recruitmentId))
