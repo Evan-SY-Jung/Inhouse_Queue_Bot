@@ -32,7 +32,7 @@ export interface RecruitmentRepository {
   updateRecruitmentMessage(recruitmentId: number, messageId: string): void;
   closeRecruitment(recruitmentId: number, now: number): void;
   closeRecruitmentByChannel(channelId: string, now: number): void;
-  closeRegistration(recruitmentId: number): Recruitment;
+  toggleRegistration(recruitmentId: number): Recruitment;
 
   listQueueMembers(recruitmentId: number): QueueMember[];
   addQueueMember(input: AddQueueMemberInput): QueueMutationResult;

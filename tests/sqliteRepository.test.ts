@@ -139,12 +139,12 @@ describe("SqliteRecruitmentRepository", () => {
     repository.close();
   });
 
-  it("locks joins and leaves after registration closes", () => {
+  it("locks joins and leaves after closing and allows them again after reopening", () => {
     const repository = new SqliteRecruitmentRepository(":memory:");
     const recruitment = createOpenRecruitment(repository);
     addMember(repository, recruitment.id, 1);
 
-    const closed = repository.closeRegistration(recruitment.id);
+    const closed = repository.toggleRegistration(recruitment.id);
     expect(closed.registrationState).toBe("CLOSED");
     expect(() => addMember(repository, recruitment.id, 2)).toThrow(
       RegistrationClosedError,
@@ -152,6 +152,34 @@ describe("SqliteRecruitmentRepository", () => {
     expect(() => repository.removeQueueMember(recruitment.id, "member-1")).toThrow(
       RegistrationClosedError,
     );
+
+    const reopened = repository.toggleRegistration(recruitment.id);
+    expect(reopened.registrationState).toBe("OPEN");
+    expect(() => addMember(repository, recruitment.id, 2)).not.toThrow();
+    expect(() => repository.removeQueueMember(recruitment.id, "member-1")).not.toThrow();
+    repository.close();
+  });
+
+  it("stores members without Riot IDs for direct member registration", () => {
+    const repository = new SqliteRecruitmentRepository(":memory:");
+    const recruitment = createOpenRecruitment(repository);
+
+    repository.addQueueMember({
+      recruitmentId: recruitment.id,
+      userId: "regular-member",
+      displayName: "정멤",
+      riotName: null,
+      riotTag: null,
+      now: 10,
+      capacity: 40,
+    });
+
+    expect(repository.listQueueMembers(recruitment.id)[0]).toMatchObject({
+      userId: "regular-member",
+      displayName: "정멤",
+      riotName: null,
+      riotTag: null,
+    });
     repository.close();
   });
 

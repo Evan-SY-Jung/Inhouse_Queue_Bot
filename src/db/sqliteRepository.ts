@@ -247,18 +247,18 @@ export class SqliteRecruitmentRepository implements RecruitmentRepository {
     });
   }
 
-  closeRegistration(recruitmentId: number): Recruitment {
+  toggleRegistration(recruitmentId: number): Recruitment {
     const result = this.db
       .prepare(
-        `UPDATE recruitments SET registration_state = 'CLOSED'
-         WHERE id = ? AND status = 'OPEN' AND registration_state = 'OPEN'`,
+        `UPDATE recruitments
+         SET registration_state = CASE registration_state
+           WHEN 'OPEN' THEN 'CLOSED'
+           ELSE 'OPEN'
+         END
+         WHERE id = ? AND status = 'OPEN'`,
       )
       .run(recruitmentId);
     if (result.changes !== 1) {
-      const recruitment = this.getRecruitment(recruitmentId);
-      if (recruitment?.registrationState === "CLOSED") {
-        throw new RegistrationClosedError();
-      }
       throw new RecruitmentNotOpenError();
     }
     return this.requireRecruitment(recruitmentId);
@@ -300,8 +300,8 @@ export class SqliteRecruitmentRepository implements RecruitmentRepository {
           input.recruitmentId,
           input.userId,
           input.displayName.slice(0, 100),
-          input.riotName.slice(0, 32),
-          input.riotTag.slice(0, 10),
+          input.riotName?.slice(0, 32) ?? null,
+          input.riotTag?.slice(0, 10) ?? null,
           input.now,
         );
 

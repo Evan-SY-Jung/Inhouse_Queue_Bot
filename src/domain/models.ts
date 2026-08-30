@@ -59,8 +59,8 @@ export interface AddQueueMemberInput {
   recruitmentId: number;
   userId: string;
   displayName: string;
-  riotName: string;
-  riotTag: string;
+  riotName: string | null;
+  riotTag: string | null;
   now: number;
   capacity: number;
 }

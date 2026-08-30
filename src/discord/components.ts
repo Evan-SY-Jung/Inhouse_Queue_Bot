@@ -59,10 +59,11 @@ export function buildRecruitmentButtons(
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
         .setCustomId(customIds.close(recruitmentId))
-        .setLabel(state.registrationClosed ? "마감됨" : "마감하기")
-        .setEmoji("🔒")
-        .setDisabled(state.registrationClosed)
-        .setStyle(ButtonStyle.Secondary),
+        .setLabel(state.registrationClosed ? "재오픈" : "마감하기")
+        .setEmoji(state.registrationClosed ? "🔓" : "🔒")
+        .setStyle(
+          state.registrationClosed ? ButtonStyle.Success : ButtonStyle.Secondary,
+        ),
       new ButtonBuilder()
         .setCustomId(customIds.teams(recruitmentId))
         .setLabel("팀 짜기")

@@ -27,6 +27,7 @@ import {
 import {
   buildRecruitmentPermissionOverwrites,
   hasUnlimitedSummonPermission,
+  interactionHasRole,
 } from "../src/discord/helpers.js";
 import {
   buildInitialRecruitmentMessagePayload,
@@ -529,27 +530,49 @@ describe("Discord views", () => {
     );
   });
 
-  it("places management buttons on row one and mention/summon on row two", () => {
-    const rows = buildRecruitmentButtons(7, {
+  it("identifies only the external inhouse role for Riot ID collection", () => {
+    const interaction = (roleIds: string[]): RepliableInteraction =>
+      ({ member: { roles: roleIds } }) as unknown as RepliableInteraction;
+
+    expect(interactionHasRole(interaction([INHOUSE_ROLE_ID]), INHOUSE_ROLE_ID)).toBe(true);
+    expect(interactionHasRole(interaction(["rookie-role"]), INHOUSE_ROLE_ID)).toBe(false);
+    expect(interactionHasRole(interaction(["regular-role"]), INHOUSE_ROLE_ID)).toBe(false);
+    expect(interactionHasRole(interaction([]), INHOUSE_ROLE_ID)).toBe(false);
+  });
+
+  it("switches close to reopen while locking and unlocking join controls", () => {
+    const closedRows = buildRecruitmentButtons(7, {
       registrationClosed: true,
       summonReady: true,
       teamReady: true,
     }).map((row) => row.toJSON());
-    expect(rows).toHaveLength(2);
-    expect(rows[0]?.components).toMatchObject([
+    const openRows = buildRecruitmentButtons(7, {
+      registrationClosed: false,
+      summonReady: true,
+      teamReady: false,
+    }).map((row) => row.toJSON());
+
+    expect(closedRows).toHaveLength(2);
+    expect(closedRows[0]?.components).toMatchObject([
       { label: "신청하기" },
       { label: "쫄튀하기" },
-      { label: "마감됨" },
+      { label: "재오픈" },
       { label: "팀 짜기" },
       { label: "삭제" },
     ]);
-    expect(rows[0]?.components[0]).toMatchObject({ disabled: true });
-    expect(rows[0]?.components[1]).toMatchObject({ disabled: true });
-    expect(rows[1]?.components).toMatchObject([
+    expect(closedRows[0]?.components[0]).toMatchObject({ disabled: true });
+    expect(closedRows[0]?.components[1]).toMatchObject({ disabled: true });
+    expect(closedRows[0]?.components[2]?.disabled).not.toBe(true);
+    expect(closedRows[1]?.components).toMatchObject([
       { label: "전체 멘션" },
       { label: "전체 소환" },
     ]);
-    expect(rows[1]?.components[1]).toMatchObject({ disabled: false });
+    expect(closedRows[1]?.components[1]).toMatchObject({ disabled: false });
+
+    expect(openRows[0]?.components[0]).toMatchObject({ disabled: false });
+    expect(openRows[0]?.components[1]).toMatchObject({ disabled: false });
+    expect(openRows[0]?.components[2]).toMatchObject({ label: "마감하기" });
+    expect(openRows[0]?.components[2]?.disabled).not.toBe(true);
     expect(INHOUSE_ROLE_ID).toBe("1412726855517081701");
     expect(INHOUSE_MANAGER_ROLE_ID).toBe("1542873758770135061");
   });

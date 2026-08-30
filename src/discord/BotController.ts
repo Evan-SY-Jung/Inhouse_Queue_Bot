@@ -165,7 +165,7 @@ export class BotController {
         await this.handleLeave(interaction, customId.id);
         return;
       case "close":
-        await this.handleCloseRegistration(interaction, customId.id);
+        await this.handleRegistrationToggle(interaction, customId.id);
         return;
       case "teams":
         await this.handleTeamFormation(interaction, customId.id);
@@ -368,8 +368,11 @@ export class BotController {
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
     this.requireOpenRegistration(recruitment);
-    this.requireInhouseRole(interaction);
-    await interaction.showModal(buildJoinModal(recruitment.id));
+    if (interactionHasRole(interaction, INHOUSE_ROLE_ID)) {
+      await interaction.showModal(buildJoinModal(recruitment.id));
+      return;
+    }
+    await this.completeQueueJoin(interaction, recruitment, null, null);
   }
 
   private async handleJoinModal(
@@ -378,11 +381,24 @@ export class BotController {
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
     this.requireOpenRegistration(recruitment);
-    this.requireInhouseRole(interaction);
     const riotId = parseRiotId(
       interaction.fields.getTextInputValue("riot_name"),
       interaction.fields.getTextInputValue("riot_tag"),
     );
+    await this.completeQueueJoin(
+      interaction,
+      recruitment,
+      riotId.name,
+      riotId.tag,
+    );
+  }
+
+  private async completeQueueJoin(
+    interaction: RecruitmentInteraction,
+    recruitment: Recruitment,
+    riotName: string | null,
+    riotTag: string | null,
+  ): Promise<void> {
     const guild = this.requireGuild(interaction);
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const member = await guild.members.fetch(interaction.user.id);
@@ -390,8 +406,8 @@ export class BotController {
       recruitmentId: recruitment.id,
       userId: interaction.user.id,
       displayName: member.displayName,
-      riotName: riotId.name,
-      riotTag: riotId.tag,
+      riotName,
+      riotTag,
       now: Date.now(),
       capacity: this.config.queueCapacity,
     });
@@ -411,16 +427,20 @@ export class BotController {
     await interaction.editReply(`이걸 쫄튀하네 ㅋ.${refreshWarning}`);
   }
 
-  private async handleCloseRegistration(
+  private async handleRegistrationToggle(
     interaction: ButtonInteraction,
     recruitmentId: number,
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
-    this.requireCreatorOrAdministrator(interaction, recruitment, "마감");
+    this.requireCreatorOrAdministrator(interaction, recruitment, "마감/재오픈");
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    this.repository.closeRegistration(recruitment.id);
+    const updated = this.repository.toggleRegistration(recruitment.id);
     const refreshWarning = await this.stateService.tryRefreshRecruitmentMessage(recruitment.id);
-    await interaction.editReply(`참가 신청을 마감했어요.${refreshWarning}`);
+    const resultMessage =
+      updated.registrationState === "CLOSED"
+        ? "참가 신청을 마감했어요."
+        : "참가 신청을 다시 열었어요.";
+    await interaction.editReply(`${resultMessage}${refreshWarning}`);
   }
 
   private async handleTeamFormation(
@@ -664,15 +684,6 @@ export class BotController {
   private requireOpenRegistration(recruitment: Recruitment): void {
     if (recruitment.registrationState !== "OPEN") {
       throw new DomainError("이 내전은 참가 신청이 마감됐어요.", "REGISTRATION_CLOSED");
-    }
-  }
-
-  private requireInhouseRole(interaction: RecruitmentInteraction): void {
-    if (!interactionHasRole(interaction, INHOUSE_ROLE_ID)) {
-      throw new DomainError(
-        `내전 역할(<@&${INHOUSE_ROLE_ID}>)이 있어야 신청할 수 있어요.`,
-        "INHOUSE_ROLE_REQUIRED",
-      );
     }
   }
 
