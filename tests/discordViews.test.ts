@@ -493,7 +493,7 @@ describe("Discord views", () => {
     });
   });
 
-  it("enables team formation only after registration closes with 10 members", () => {
+  it("enables team formation after registration closes with at least one member", () => {
     const teamButton = (registrationState: Recruitment["registrationState"], count: number) =>
       buildRecruitmentMessagePayload(
         { ...recruitment, registrationState },
@@ -502,7 +502,9 @@ describe("Discord views", () => {
       ).components[0]!.toJSON().components[3];
 
     expect(teamButton("OPEN", 10)).toMatchObject({ label: "팀 짜기", disabled: true });
-    expect(teamButton("CLOSED", 9)).toMatchObject({ label: "팀 짜기", disabled: true });
+    expect(teamButton("CLOSED", 0)).toMatchObject({ label: "팀 짜기", disabled: true });
+    expect(teamButton("CLOSED", 1)).toMatchObject({ label: "팀 짜기", disabled: false });
+    expect(teamButton("CLOSED", 9)).toMatchObject({ label: "팀 짜기", disabled: false });
     expect(teamButton("CLOSED", 10)).toMatchObject({ label: "팀 짜기", disabled: false });
   });
 

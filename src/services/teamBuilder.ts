@@ -103,13 +103,10 @@ export class TeamBuilderService {
       );
     }
 
-    const selectedCount = Math.min(
-      Math.floor(members.length / callSize) * callSize,
-      callSize * 2,
-    );
-    if (selectedCount < callSize) {
+    const selectedCount = Math.min(members.length, callSize * 2);
+    if (selectedCount < 1) {
       throw new DomainError(
-        `팀을 짜려면 최소 ${callSize}명이 필요해요.`,
+        "팀을 짜려면 참가자가 최소 1명 필요해요.",
         "NOT_ENOUGH_MEMBERS",
       );
     }

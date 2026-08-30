@@ -35,7 +35,7 @@ export function buildRecruitmentMessagePayload(
         summonReady: resolveSummonTargetLimit(members.length, config.callSize) > 0,
         teamReady:
           recruitment.registrationState === "CLOSED" &&
-          resolveSummonTargetLimit(members.length, config.callSize) > 0,
+          members.length > 0,
       },
     ),
     allowedMentions: { parse: [] },

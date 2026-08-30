@@ -113,7 +113,7 @@ function initializeWorkspace(value) {
 
 function buildGameBoards(value) {
   const gameSize = value.teamSize * 2;
-  const gameCount = value.players.length / gameSize;
+  const gameCount = Math.ceil(value.players.length / gameSize);
   for (let gameIndex = 0; gameIndex < gameCount; gameIndex += 1) {
     const board = elements.gameTemplate.content.firstElementChild.cloneNode(true);
     board.dataset.game = String(gameIndex + 1);
@@ -169,7 +169,8 @@ function autoBalance(showMessage = true) {
     ? knownScores[Math.floor(knownScores.length / 2)]
     : 0;
 
-  for (let gameIndex = 0; gameIndex < players.length / gameSize; gameIndex += 1) {
+  const gameCount = Math.ceil(players.length / gameSize);
+  for (let gameIndex = 0; gameIndex < gameCount; gameIndex += 1) {
     const group = players
       .slice(gameIndex * gameSize, (gameIndex + 1) * gameSize)
       .sort(
@@ -180,11 +181,13 @@ function autoBalance(showMessage = true) {
     const red = [];
     let blueScore = 0;
     let redScore = 0;
+    const blueTarget = Math.ceil(group.length / 2);
+    const redTarget = Math.floor(group.length / 2);
     for (const player of group) {
       const score = player.score ?? fallbackScore;
       if (
-        blue.length < session.teamSize &&
-        (red.length >= session.teamSize || blueScore <= redScore)
+        blue.length < blueTarget &&
+        (red.length >= redTarget || blueScore <= redScore)
       ) {
         blue.push(player);
         blueScore += score;
@@ -204,10 +207,12 @@ function autoBalance(showMessage = true) {
 function randomizeTeams() {
   moveAllToPool();
   const gameSize = session.teamSize * 2;
-  for (let gameIndex = 0; gameIndex < players.length / gameSize; gameIndex += 1) {
+  const gameCount = Math.ceil(players.length / gameSize);
+  for (let gameIndex = 0; gameIndex < gameCount; gameIndex += 1) {
     const group = shuffle(players.slice(gameIndex * gameSize, (gameIndex + 1) * gameSize));
-    appendPlayers(`g${gameIndex + 1}-blue`, group.slice(0, session.teamSize));
-    appendPlayers(`g${gameIndex + 1}-red`, group.slice(session.teamSize));
+    const blueCount = Math.ceil(group.length / 2);
+    appendPlayers(`g${gameIndex + 1}-blue`, group.slice(0, blueCount));
+    appendPlayers(`g${gameIndex + 1}-red`, group.slice(blueCount));
   }
   updateBoard();
   saveLayout();
@@ -431,14 +436,6 @@ function rankTitle(player) {
 }
 
 async function copyDiscordResult() {
-  const incomplete = [...zones.entries()]
-    .filter(([zoneId]) => zoneId !== "pool")
-    .some(([, zone]) => zone.querySelectorAll(":scope > .player-card").length !== session.teamSize);
-  if (incomplete) {
-    showToast("모든 팀을 정원까지 채운 뒤 결과를 복사해 주세요.");
-    return;
-  }
-
   const lines = ["# ⚔️ CR 내전 팀 편성 결과"];
   for (const board of elements.gamesColumn.querySelectorAll(".game-board")) {
     const gameNumber = board.dataset.game;
@@ -448,14 +445,26 @@ async function copyDiscordResult() {
       ["red", "🔴 레드팀"],
     ]) {
       lines.push(`**${label}**`);
-      const teamCards = board.querySelectorAll(`[data-side="${side}"] > .player-card`);
+      const teamCards = [...board.querySelectorAll(`[data-side="${side}"] > .player-card`)];
       teamCards.forEach((card, index) => {
         const player = playerById(card.dataset.playerId);
         lines.push(
           `${index + 1}. ${escapeDiscord(player.displayName)} · ${escapeDiscord(player.riotName)} #${escapeDiscord(player.riotTag)} · ${formatRank(player)}`,
         );
       });
+      const emptySlots = session.teamSize - teamCards.length;
+      if (emptySlots > 0) lines.push(`-# 빈자리 ${emptySlots}명`);
     }
+  }
+  const poolCards = [...elements.playerPool.querySelectorAll(":scope > .player-card")];
+  if (poolCards.length > 0) {
+    lines.push("", "## 미배정 대기열");
+    poolCards.forEach((card, index) => {
+      const player = playerById(card.dataset.playerId);
+      lines.push(
+        `${index + 1}. ${escapeDiscord(player.displayName)} · ${escapeDiscord(player.riotName)} #${escapeDiscord(player.riotTag)} · ${formatRank(player)}`,
+      );
+    });
   }
   if (session.excludedCount > 0) {
     lines.push("", `-# 후순위 ${session.excludedCount}명은 이번 편성에서 제외`);
@@ -596,9 +605,8 @@ function parseSession(value) {
     !Number.isInteger(excludedCount) ||
     excludedCount < 0 ||
     !Array.isArray(rows) ||
-    rows.length < teamSize * 2 ||
-    rows.length > teamSize * 4 ||
-    rows.length % (teamSize * 2) !== 0
+    rows.length < 1 ||
+    rows.length > teamSize * 4
   ) {
     throw new Error("팀 편성 세션 값이 올바르지 않습니다.");
   }

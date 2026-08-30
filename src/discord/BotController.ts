@@ -467,9 +467,9 @@ export class BotController {
     }
 
     const members = this.repository.listQueueMembers(recruitment.id);
-    if (members.length < this.config.callSize) {
+    if (members.length < 1) {
       throw new DomainError(
-        `팀을 짜려면 최소 ${this.config.callSize}명이 필요해요.`,
+        "팀을 짜려면 참가자가 최소 1명 필요해요.",
         "NOT_ENOUGH_MEMBERS",
       );
     }

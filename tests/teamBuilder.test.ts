@@ -56,7 +56,7 @@ describe("team builder session", () => {
     ).toEqual({ name: "DisplayName", tag: "NA1" });
   });
 
-  it("encodes the first complete game into an expiring URL fragment", async () => {
+  it("encodes partial games into an expiring URL fragment", async () => {
     const service = new TeamBuilderService(rankLookup, {
       baseUrl: "https://example.github.io/Inhouse_Queue_Bot/",
       fixedMemberTag: "클로버",
@@ -71,9 +71,9 @@ describe("team builder session", () => {
 
     expect(url.origin + url.pathname).toBe("https://example.github.io/Inhouse_Queue_Bot/");
     expect(result).toMatchObject({
-      selectedCount: 10,
-      excludedCount: 3,
-      rankedCount: 9,
+      selectedCount: 13,
+      excludedCount: 0,
+      rankedCount: 12,
       unrankedCount: 1,
       unavailableCount: 0,
     });
@@ -84,9 +84,9 @@ describe("team builder session", () => {
       generatedAt: 1_800_000_000,
       expiresAt: 1_800_003_600,
       teamSize: 5,
-      excludedCount: 3,
+      excludedCount: 0,
     });
-    expect(session.players).toHaveLength(10);
+    expect(session.players).toHaveLength(13);
     expect(session.players[0]).toMatchObject({
       displayName: "정멤1",
       riotName: "정멤1",
@@ -99,6 +99,24 @@ describe("team builder session", () => {
       riotTag: "NEW1",
     });
     expect(result.url).not.toContain("secret");
+  });
+
+  it("creates a test board with a single participant", async () => {
+    const service = new TeamBuilderService(rankLookup, {
+      baseUrl: "https://example.github.io/Inhouse_Queue_Bot/",
+      fixedMemberTag: "클로버",
+      callSize: 10,
+      sessionTtlMs: 300_000,
+    });
+
+    const result = await service.createLink(recruitment, members(1));
+    const session = decodeTeamBuilderSession(new URL(result.url).hash.slice("#s=".length));
+
+    expect(result).toMatchObject({ selectedCount: 1, excludedCount: 0 });
+    expect(session.players).toHaveLength(1);
+    await expect(service.createLink(recruitment, [])).rejects.toMatchObject({
+      code: "NOT_ENOUGH_MEMBERS",
+    });
   });
 
   it("caps a full queue at the first two games", async () => {

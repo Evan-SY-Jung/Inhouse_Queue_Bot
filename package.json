@@ -1,6 +1,6 @@
 {
   "name": "cr-inhouse-queue-bot",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "CR Clan Discord in-house queue bot",
   "type": "module",
