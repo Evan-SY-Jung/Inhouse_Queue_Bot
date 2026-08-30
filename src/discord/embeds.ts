@@ -34,7 +34,7 @@ export function buildRecruitmentEmbed(
   capacity: number,
 ): EmbedBuilder {
   const config = EMBED_CONFIG.recruitment ?? {};
-  const isReservation = recruitment.kind === "RESERVATION";
+  const isReservation = isReservationStyle(recruitment);
   const values = createRecruitmentValues(
     config,
     recruitment,
@@ -73,7 +73,7 @@ function createRecruitmentValues(
   callSize: number,
   capacity: number,
 ): TemplateValues {
-  const isReservation = recruitment.kind === "RESERVATION";
+  const isReservation = isReservationStyle(recruitment);
   return {
     creatorId: recruitment.creatorId,
     creatorMention: `<@${recruitment.creatorId}>`,
@@ -241,8 +241,12 @@ function addQueueFields(
   if (!queue || queue.enabled === false) return;
   const inline = queue.inline !== false;
   const primary = members.slice(0, callSize);
-  const second = members.slice(callSize, capacity);
-  const waiting = members.slice(capacity);
+  const secondLimit = Math.min(callSize * 2, capacity);
+  const thirdLimit = Math.min(callSize * 3, capacity);
+  const fourthLimit = Math.min(callSize * 4, capacity);
+  const second = members.slice(callSize, secondLimit);
+  const third = members.slice(secondLimit, thirdLimit);
+  const fourth = members.slice(thirdLimit, fourthLimit);
 
   appendQueueField(
     embed,
@@ -262,20 +266,41 @@ function addQueueFields(
       queue.emptySecond,
       {
         ...baseValues,
-        count: Math.min(members.length, capacity),
-        limit: capacity,
+        count: Math.min(members.length, secondLimit),
+        limit: secondLimit,
       },
       inline,
     );
   }
-  if (members.length >= capacity) {
+
+  if (capacity > secondLimit && members.length > secondLimit) {
+    if (inline) addInlineRowBreak(embed, state, state.fieldCount);
     appendQueueField(
       embed,
       state,
-      queue.waitingName,
-      waiting,
-      queue.emptyWaiting,
-      { ...baseValues, count: waiting.length, limit: capacity },
+      queue.thirdName ?? queue.waitingName,
+      third,
+      queue.emptyThird ?? queue.emptyWaiting,
+      {
+        ...baseValues,
+        count: Math.min(members.length, thirdLimit),
+        limit: thirdLimit,
+      },
+      inline,
+    );
+  }
+  if (capacity > thirdLimit && members.length > thirdLimit) {
+    appendQueueField(
+      embed,
+      state,
+      queue.fourthName,
+      fourth,
+      queue.emptyFourth,
+      {
+        ...baseValues,
+        count: Math.min(members.length, fourthLimit),
+        limit: fourthLimit,
+      },
       inline,
     );
   }
@@ -289,12 +314,12 @@ function appendQueueField(
   emptyTemplate: string | null | undefined,
   values: TemplateValues,
   inline: boolean,
-): void {
+): boolean {
   const name = renderEditableText(nameTemplate, values);
   const emptyMessage = renderEditableText(emptyTemplate, values);
   const value = formatMembers(members, emptyMessage);
-  if (!name || !value) return;
-  addSafeField(embed, state, { name, value, inline }, values);
+  if (!name || !value) return false;
+  return addSafeField(embed, state, { name, value, inline }, values);
 }
 
 function formatMembers(members: QueueMember[], emptyMessage: string | null): string | null {
@@ -302,7 +327,11 @@ function formatMembers(members: QueueMember[], emptyMessage: string | null): str
 
   const shown: string[] = [];
   for (const member of members) {
-    const line = `<@${member.userId}>`;
+    const riotId =
+      member.riotName && member.riotTag
+        ? ` — ${escapeMarkdown(member.riotName)} #${escapeMarkdown(member.riotTag)}`
+        : "";
+    const line = `<@${member.userId}>${riotId}`;
     const remaining = members.length - shown.length - 1;
     const suffix = remaining > 0 ? `\n… 외 ${remaining}명` : "";
     if ([...shown, line].join("\n").length + suffix.length > MAX_FIELD_LENGTH) break;
@@ -311,6 +340,25 @@ function formatMembers(members: QueueMember[], emptyMessage: string | null): str
 
   const remaining = members.length - shown.length;
   return `${shown.join("\n")}${remaining > 0 ? `\n… 외 ${remaining}명` : ""}`;
+}
+
+function addInlineRowBreak(
+  embed: EmbedBuilder,
+  state: EmbedRenderState,
+  currentRowFields: number,
+): void {
+  const remainder = currentRowFields % 3;
+  if (remainder === 0) return;
+  for (let index = remainder; index < 3; index += 1) {
+    addSafeField(embed, state, { name: "\u200b", value: "\u200b", inline: true }, {});
+  }
+}
+
+function isReservationStyle(recruitment: Recruitment): boolean {
+  return (
+    recruitment.kind === "RESERVATION" ||
+    Boolean(recruitment.scheduledAt && recruitment.timezoneInput)
+  );
 }
 
 function hasOwn(object: object, key: PropertyKey): boolean {

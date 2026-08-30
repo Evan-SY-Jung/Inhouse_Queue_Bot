@@ -1,4 +1,5 @@
 import type {
+  AddQueueMemberInput,
   ClaimPanelInput,
   ClaimRecruitmentInput,
   CooldownResult,
@@ -31,14 +32,10 @@ export interface RecruitmentRepository {
   updateRecruitmentMessage(recruitmentId: number, messageId: string): void;
   closeRecruitment(recruitmentId: number, now: number): void;
   closeRecruitmentByChannel(channelId: string, now: number): void;
+  closeRegistration(recruitmentId: number): Recruitment;
 
   listQueueMembers(recruitmentId: number): QueueMember[];
-  addQueueMember(
-    recruitmentId: number,
-    userId: string,
-    displayName: string,
-    now: number,
-  ): QueueMutationResult;
+  addQueueMember(input: AddQueueMemberInput): QueueMutationResult;
   removeQueueMember(recruitmentId: number, userId: string): QueueMutationResult;
 
   tryAcquireCooldown(

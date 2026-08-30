@@ -4,9 +4,12 @@ import {
   ActiveRecruitmentExistsError,
   AlreadyJoinedError,
   NotJoinedError,
+  QueueFullError,
+  RegistrationClosedError,
   RecruitmentNotOpenError,
 } from "../domain/errors.js";
 import type {
+  AddQueueMemberInput,
   ClaimPanelInput,
   ClaimRecruitmentInput,
   CooldownResult,
@@ -210,72 +213,108 @@ export class SqliteRecruitmentRepository implements RecruitmentRepository {
   }
 
   closeRecruitment(recruitmentId: number, now: number): void {
-    this.db
-      .prepare(
-        `UPDATE recruitments
-         SET status = 'CLOSED', closed_at = ?, channel_number = NULL
-         WHERE id = ? AND status != 'CLOSED'`,
-      )
-      .run(now, recruitmentId);
+    this.transaction(() => {
+      this.db
+        .prepare("DELETE FROM queue_members WHERE recruitment_id = ?")
+        .run(recruitmentId);
+      this.db
+        .prepare(
+          `UPDATE recruitments
+           SET status = 'CLOSED', closed_at = ?, channel_number = NULL
+           WHERE id = ? AND status != 'CLOSED'`,
+        )
+        .run(now, recruitmentId);
+    });
   }
 
   closeRecruitmentByChannel(channelId: string, now: number): void {
-    this.db
+    this.transaction(() => {
+      this.db
+        .prepare(
+          `DELETE FROM queue_members
+           WHERE recruitment_id IN (
+             SELECT id FROM recruitments WHERE channel_id = ?
+           )`,
+        )
+        .run(channelId);
+      this.db
+        .prepare(
+          `UPDATE recruitments
+           SET status = 'CLOSED', closed_at = ?, channel_number = NULL
+           WHERE channel_id = ? AND status != 'CLOSED'`,
+        )
+        .run(now, channelId);
+    });
+  }
+
+  closeRegistration(recruitmentId: number): Recruitment {
+    const result = this.db
       .prepare(
-        `UPDATE recruitments
-         SET status = 'CLOSED', closed_at = ?, channel_number = NULL
-         WHERE channel_id = ? AND status != 'CLOSED'`,
+        `UPDATE recruitments SET registration_state = 'CLOSED'
+         WHERE id = ? AND status = 'OPEN' AND registration_state = 'OPEN'`,
       )
-      .run(now, channelId);
+      .run(recruitmentId);
+    if (result.changes !== 1) {
+      const recruitment = this.getRecruitment(recruitmentId);
+      if (recruitment?.registrationState === "CLOSED") {
+        throw new RegistrationClosedError();
+      }
+      throw new RecruitmentNotOpenError();
+    }
+    return this.requireRecruitment(recruitmentId);
   }
 
   listQueueMembers(recruitmentId: number): QueueMember[] {
     return this.db
       .prepare(
-        `SELECT sequence, recruitment_id, user_id, display_name, joined_at
+        `SELECT sequence, recruitment_id, user_id, display_name, riot_name, riot_tag, joined_at
          FROM queue_members WHERE recruitment_id = ? ORDER BY sequence ASC`,
       )
       .all(recruitmentId)
       .map((row) => mapQueueMember(row as SqlRow));
   }
 
-  addQueueMember(
-    recruitmentId: number,
-    userId: string,
-    displayName: string,
-    now: number,
-  ): QueueMutationResult {
+  addQueueMember(input: AddQueueMemberInput): QueueMutationResult {
     return this.transaction(() => {
-      this.assertOpenRecruitment(recruitmentId);
+      this.assertAcceptingRecruitment(input.recruitmentId);
       const existing = this.db
         .prepare(
           "SELECT sequence FROM queue_members WHERE recruitment_id = ? AND user_id = ?",
         )
-        .get(recruitmentId, userId);
+        .get(input.recruitmentId, input.userId);
       if (existing) throw new AlreadyJoinedError();
 
       const countRow = this.db
         .prepare("SELECT COUNT(*) AS count FROM queue_members WHERE recruitment_id = ?")
-        .get(recruitmentId) as SqlRow;
+        .get(input.recruitmentId) as SqlRow;
       const count = Number(countRow.count);
+      if (count >= input.capacity) throw new QueueFullError(input.capacity);
 
       this.db
         .prepare(
-          `INSERT INTO queue_members (recruitment_id, user_id, display_name, joined_at)
-           VALUES (?, ?, ?, ?)`,
+          `INSERT INTO queue_members
+             (recruitment_id, user_id, display_name, riot_name, riot_tag, joined_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
         )
-        .run(recruitmentId, userId, displayName.slice(0, 100), now);
+        .run(
+          input.recruitmentId,
+          input.userId,
+          input.displayName.slice(0, 100),
+          input.riotName.slice(0, 32),
+          input.riotTag.slice(0, 10),
+          input.now,
+        );
 
       return {
         position: count + 1,
-        members: this.listQueueMembers(recruitmentId),
+        members: this.listQueueMembers(input.recruitmentId),
       };
     });
   }
 
   removeQueueMember(recruitmentId: number, userId: string): QueueMutationResult {
     return this.transaction(() => {
-      this.assertOpenRecruitment(recruitmentId);
+      this.assertAcceptingRecruitment(recruitmentId);
       const row = this.db
         .prepare(
           "SELECT sequence FROM queue_members WHERE recruitment_id = ? AND user_id = ?",
@@ -409,11 +448,12 @@ export class SqliteRecruitmentRepository implements RecruitmentRepository {
     });
   }
 
-  private assertOpenRecruitment(recruitmentId: number): void {
+  private assertAcceptingRecruitment(recruitmentId: number): void {
     const row = this.db
-      .prepare("SELECT status FROM recruitments WHERE id = ?")
+      .prepare("SELECT status, registration_state FROM recruitments WHERE id = ?")
       .get(recruitmentId) as SqlRow | undefined;
     if (!row || row.status !== "OPEN") throw new RecruitmentNotOpenError();
+    if (row.registration_state !== "OPEN") throw new RegistrationClosedError();
   }
 
   private requirePanel(panelId: number): Panel {
@@ -470,6 +510,7 @@ function mapRecruitment(row: SqlRow): Recruitment {
     scheduledAt: nullableNumber(row.scheduled_at),
     timezoneInput: nullableString(row.timezone_input),
     status: String(row.status) as Recruitment["status"],
+    registrationState: String(row.registration_state) as Recruitment["registrationState"],
     summonState: String(row.summon_state) as Recruitment["summonState"],
     createdAt: Number(row.created_at),
     closedAt: nullableNumber(row.closed_at),
@@ -482,6 +523,8 @@ function mapQueueMember(row: SqlRow): QueueMember {
     recruitmentId: Number(row.recruitment_id),
     userId: String(row.user_id),
     displayName: String(row.display_name),
+    riotName: nullableString(row.riot_name),
+    riotTag: nullableString(row.riot_tag),
     joinedAt: Number(row.joined_at),
   };
 }

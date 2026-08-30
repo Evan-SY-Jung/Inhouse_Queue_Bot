@@ -12,6 +12,8 @@ export interface AppConfig {
   mentionCooldownMs: number;
 }
 
+export const QUEUE_CAPACITY = 40;
+
 function required(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -40,7 +42,7 @@ export function loadConfig(): AppConfig {
     clientId: required("DISCORD_CLIENT_ID"),
     ...(guildId ? { guildId } : {}),
     databasePath,
-    queueCapacity: integer("QUEUE_CAPACITY", 20, 10, 20),
+    queueCapacity: QUEUE_CAPACITY,
     callSize: integer("CALL_SIZE", 10, 2, 10),
     mentionCooldownMs: integer("MENTION_COOLDOWN_SECONDS", 10, 1, 300) * 1_000,
   };

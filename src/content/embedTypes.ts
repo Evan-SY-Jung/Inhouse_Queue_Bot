@@ -41,6 +41,11 @@ export interface EditableQueueConfig {
   waitingName?: string | null;
   emptyPrimary?: string | null;
   emptySecond?: string | null;
+  thirdName?: string | null;
+  fourthName?: string | null;
+  emptyThird?: string | null;
+  emptyFourth?: string | null;
+  /** v0.3.x 설정 파일 호환용 별칭입니다. */
   emptyWaiting?: string | null;
 }
 

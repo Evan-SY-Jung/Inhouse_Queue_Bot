@@ -19,6 +19,22 @@ export function isAdministrator(interaction: RepliableInteraction): boolean {
   return interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ?? false;
 }
 
+export function interactionHasRole(
+  interaction: RepliableInteraction,
+  roleId: string,
+): boolean {
+  const roles = interaction.member?.roles;
+  if (!roles) return false;
+  return Array.isArray(roles) ? roles.includes(roleId) : roles.cache.has(roleId);
+}
+
+export function hasUnlimitedSummonPermission(
+  interaction: RepliableInteraction,
+  managerRoleId: string,
+): boolean {
+  return isAdministrator(interaction) || interactionHasRole(interaction, managerRoleId);
+}
+
 export function asCategory(channel: GuildBasedChannel | null): CategoryChannel | null {
   return channel?.type === ChannelType.GuildCategory ? channel : null;
 }

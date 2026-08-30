@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { PermissionFlagsBits, PermissionsBitField } from "discord.js";
+import {
+  PermissionFlagsBits,
+  PermissionsBitField,
+  type RepliableInteraction,
+} from "discord.js";
 import { EMBED_CONFIG } from "../src/content/embedConfig.js";
 import type { QueueMember, Recruitment } from "../src/domain/models.js";
 import { buildRecruitmentChannelName } from "../src/services/channelNames.js";
@@ -7,17 +11,23 @@ import { customIds, parseCustomId } from "../src/discord/customIds.js";
 import { buildPanelEmbed, buildRecruitmentEmbed } from "../src/discord/embeds.js";
 import {
   buildImmediateRecruitmentModal,
+  buildJoinModal,
+  buildPanelButtons,
   buildRecruitmentButtons,
-  buildReservationModal,
   buildSetupModal,
   buildSummonModal,
 } from "../src/discord/components.js";
 import { applicationCommands } from "../src/discord/commands.js";
 import {
+  INHOUSE_MANAGER_ROLE_ID,
+  INHOUSE_ROLE_ID,
   PANEL_CHANNEL_NAME,
   SUMMON_VOICE_CHANNEL_ID,
 } from "../src/discord/constants.js";
-import { buildRecruitmentPermissionOverwrites } from "../src/discord/helpers.js";
+import {
+  buildRecruitmentPermissionOverwrites,
+  hasUnlimitedSummonPermission,
+} from "../src/discord/helpers.js";
 import {
   buildInitialRecruitmentMessagePayload,
   buildRecruitmentMessagePayload,
@@ -38,6 +48,7 @@ const recruitment: Recruitment = {
   scheduledAt: 1_800_000_000_000,
   timezoneInput: "PT",
   status: "OPEN",
+  registrationState: "OPEN",
   summonState: "AVAILABLE",
   createdAt: 1_700_000_000_000,
   closedAt: null,
@@ -49,12 +60,14 @@ function member(index: number): QueueMember {
     recruitmentId: recruitment.id,
     userId: String(600_000_000_000_000_000n + BigInt(index)),
     displayName: `참가자 ${index}`,
+    riotName: `라이엇${index}`,
+    riotTag: `TAG${index}`,
     joinedAt: index,
   };
 }
 
 describe("Discord views", () => {
-  it("reveals the 20-player roster only after 10 and waiters after 20", () => {
+  it("renders a two-row 40-player roster and starts row two after 20", () => {
     const empty = buildRecruitmentEmbed(recruitment, [], 10, 20).toJSON();
     const ten = buildRecruitmentEmbed(
       recruitment,
@@ -62,27 +75,41 @@ describe("Discord views", () => {
       10,
       20,
     ).toJSON();
-    const embed = buildRecruitmentEmbed(
+    const twentyOne = buildRecruitmentEmbed(
       recruitment,
-      Array.from({ length: 23 }, (_, index) => member(index + 1)),
+      Array.from({ length: 21 }, (_, index) => member(index + 1)),
       10,
-      20,
+      40,
+    ).toJSON();
+    const forty = buildRecruitmentEmbed(
+      recruitment,
+      Array.from({ length: 40 }, (_, index) => member(index + 1)),
+      10,
+      40,
     ).toJSON();
 
     expect(empty.fields).toHaveLength(1);
     expect(empty.fields?.[0]?.name).toBe("0/10 대기열");
     expect(ten.fields).toHaveLength(2);
     expect(ten.fields?.[1]?.name).toBe("10/20 대기열");
-    expect(embed.fields).toHaveLength(3);
-    expect(embed.fields?.[0]?.name).toBe("10/10 대기열");
-    expect(embed.fields?.[1]?.name).toBe("20/20 대기열");
-    expect(embed.fields?.[2]?.name).toBe("대기자");
-    expect(embed.fields?.[0]?.value).toContain("<@600000000000000001>");
-    expect(embed.fields?.[0]?.value).not.toContain("<@600000000000000011>");
-    expect(embed.fields?.[1]?.value).toContain("<@600000000000000011>");
-    expect(embed.fields?.[2]?.value).toContain("<@600000000000000021>");
-    expect(embed.description).toContain("<t:1800000000:F>");
-    expect(embed.color).toBe(0x57f287);
+    expect(twentyOne.fields).toHaveLength(4);
+    expect(twentyOne.fields?.[0]?.name).toBe("10/10 대기열");
+    expect(twentyOne.fields?.[1]?.name).toBe("20/20 대기열");
+    expect(twentyOne.fields?.[2]).toMatchObject({
+      name: "\u200b",
+      value: "\u200b",
+      inline: true,
+    });
+    expect(twentyOne.fields?.[3]?.name).toBe("21/30 대기열");
+    expect(twentyOne.fields?.[3]?.value).toContain("<@600000000000000021>");
+
+    expect(forty.fields).toHaveLength(5);
+    expect(forty.fields?.[3]?.name).toBe("30/30 대기열");
+    expect(forty.fields?.[4]?.name).toBe("40/40 대기열");
+    expect(forty.fields?.[4]?.value).toContain("<@600000000000000040>");
+    expect(forty.fields?.[0]?.value).toContain("라이엇1 #TAG1");
+    expect(forty.description).toContain("<t:1800000000:F>");
+    expect(forty.color).toBe(0x57f287);
   });
 
   it("shows local-time and description sections for immediate queues only when provided", () => {
@@ -104,11 +131,41 @@ describe("Discord views", () => {
       10,
       20,
     ).toJSON();
+    const descriptionOnly = buildRecruitmentEmbed(
+      {
+        ...recruitment,
+        kind: "RIFT_NOW",
+        channelNumber: 1,
+        scheduledAt: null,
+        timezoneInput: null,
+      },
+      [],
+      10,
+      40,
+    ).toJSON();
 
     expect(configured.description).toContain("<t:1800000000:F>");
     expect(configured.description).toContain("골드 이하");
     expect(plain.description).not.toContain("<t:");
     expect(plain.description).not.toContain("골드 이하");
+    expect(plain.description).toContain("너만 오면 바로 고! 사람 모이면 바로 시작할거야!");
+    expect(descriptionOnly.description).toContain(
+      "너만 오면 바로 고! 사람 모이면 바로 시작할거야!",
+    );
+    expect(descriptionOnly.description).toContain("골드 이하");
+  });
+
+  it("uses reservation copy but keeps a queue channel name when all schedule fields exist", () => {
+    const scheduledQueue = {
+      ...recruitment,
+      kind: "RIFT_NOW" as const,
+      channelNumber: 1,
+    };
+    const embed = buildRecruitmentEmbed(scheduledQueue, [], 10, 40).toJSON();
+
+    expect(embed.description).toContain("시간 많네!");
+    expect(embed.description).toContain("<t:1800000000:F>");
+    expect(buildRecruitmentChannelName(scheduledQueue)).toBe("🏠ㆍ협곡대기열🄐");
   });
 
   it("accepts optional standard embed properties and ignores unknown additions", () => {
@@ -251,6 +308,21 @@ describe("Discord views", () => {
       action: "summon-confirm",
       id: 7,
     });
+    expect(parseCustomId(customIds.joinModal(7))).toEqual({
+      action: "join-submit",
+      id: 7,
+    });
+    expect(parseCustomId(customIds.close(7))).toEqual({ action: "close", id: 7 });
+    expect(parseCustomId(customIds.teams(7))).toEqual({ action: "teams", id: 7 });
+  });
+
+  it("moves reservation setup into the Rift and ARAM recruitment buttons", () => {
+    const panelRow = buildPanelButtons(1)[0]!.toJSON();
+    expect(panelRow.components).toHaveLength(2);
+    expect(panelRow.components).toMatchObject([
+      { label: "협곡 내전 모집" },
+      { label: "아람 내전 모집" },
+    ]);
   });
 
   it("builds per-game lettered queue names and local-date reservation names", () => {
@@ -301,56 +373,41 @@ describe("Discord views", () => {
     expect(command?.options?.[0]?.name).toBe("세팅");
   });
 
-  it("builds required setup/reservation/confirmation modal fields", () => {
+  it("builds optional scheduling, required Riot ID, and confirmation modal fields", () => {
     const setup = buildSetupModal().toJSON();
     const immediate = buildImmediateRecruitmentModal(1, "RIFT").toJSON();
-    const reservation = buildReservationModal(1).toJSON();
+    const join = buildJoinModal(7).toJSON();
     const summon = buildSummonModal(7).toJSON();
 
     expect(setup.components).toHaveLength(1);
     expect(immediate.custom_id).toBe("crq:immediate:rift:1");
-    expect(immediate.components).toHaveLength(2);
+    expect(immediate.components).toHaveLength(4);
     expect(immediate.components[0]).toMatchObject({
       component: {
-        custom_id: "start_delay",
-        min_values: 0,
-        max_values: 1,
+        custom_id: "date",
         required: false,
-        options: [
-          expect.objectContaining({ value: "10" }),
-          expect.objectContaining({ value: "15" }),
-          expect.objectContaining({ value: "20" }),
-          expect.objectContaining({ value: "30" }),
-          expect.objectContaining({ value: "45" }),
-          expect.objectContaining({ value: "60" }),
-          expect.objectContaining({ value: "90" }),
-          expect.objectContaining({ value: "120" }),
-        ],
       },
     });
     expect(immediate.components[1]).toMatchObject({
-      component: { custom_id: "description", required: false },
+      component: { custom_id: "time", required: false },
     });
-    expect(reservation.components).toHaveLength(5);
-    expect(reservation.components[0]).toMatchObject({
-      component: {
-        custom_id: "game_type",
-        options: [
-          expect.objectContaining({ value: "RIFT" }),
-          expect.objectContaining({ value: "ARAM" }),
-        ],
-      },
-    });
-    expect(reservation.components[3]).toMatchObject({
+    expect(immediate.components[2]).toMatchObject({
       component: {
         custom_id: "timezone",
-        options: [
-          expect.objectContaining({ value: "PST" }),
-          expect.objectContaining({ value: "EST" }),
-          expect.objectContaining({ value: "CST" }),
-          expect.objectContaining({ value: "MT" }),
-        ],
+        min_values: 0,
+        max_values: 1,
+        required: false,
       },
+    });
+    expect(immediate.components[3]).toMatchObject({
+      component: { custom_id: "description", required: false },
+    });
+    expect(join.components).toHaveLength(2);
+    expect(join.components[0]).toMatchObject({
+      component: { custom_id: "riot_name", required: true },
+    });
+    expect(join.components[1]).toMatchObject({
+      component: { custom_id: "riot_tag", required: true },
     });
     expect(summon.components).toHaveLength(1);
     expect(summon.custom_id).toBe("crq:summon-confirm:7");
@@ -389,11 +446,11 @@ describe("Discord views", () => {
   it("mentions @here outside the embed only on the initial recruitment message", () => {
     const initial = buildInitialRecruitmentMessagePayload(recruitment, [], {
       callSize: 10,
-      queueCapacity: 20,
+      queueCapacity: 40,
     });
     const refresh = buildRecruitmentMessagePayload(recruitment, [], {
       callSize: 10,
-      queueCapacity: 20,
+      queueCapacity: 40,
     });
 
     expect(initial.content).toBe("||@here||");
@@ -407,9 +464,9 @@ describe("Discord views", () => {
       const payload = buildRecruitmentMessagePayload(
         recruitment,
         Array.from({ length: memberCount }, (_, index) => member(index + 1)),
-        { callSize: 10, queueCapacity: 20 },
+        { callSize: 10, queueCapacity: 40 },
       );
-      return payload.components[0]?.toJSON().components[3];
+      return payload.components[1]?.toJSON().components[1];
     };
 
     expect(summonButton(9)).toMatchObject({ label: "전체 소환", disabled: true });
@@ -419,10 +476,81 @@ describe("Discord views", () => {
     expect(summonButton(22)).toMatchObject({ label: "전체 소환", disabled: false });
   });
 
-  it("keeps management disabled and disables summon after use", () => {
-    const rows = buildRecruitmentButtons(7, true).map((row) => row.toJSON());
+  it("keeps summon clickable after regular use so managers can summon repeatedly", () => {
+    const payload = buildRecruitmentMessagePayload(
+      { ...recruitment, summonState: "USED" },
+      Array.from({ length: 10 }, (_, index) => member(index + 1)),
+      { callSize: 10, queueCapacity: 40 },
+    );
+
+    expect(payload.components[1]?.toJSON().components[1]).toMatchObject({
+      label: "전체 소환",
+      disabled: false,
+    });
+  });
+
+  it("enables team formation only after registration closes with 10 members", () => {
+    const teamButton = (registrationState: Recruitment["registrationState"], count: number) =>
+      buildRecruitmentMessagePayload(
+        { ...recruitment, registrationState },
+        Array.from({ length: count }, (_, index) => member(index + 1)),
+        { callSize: 10, queueCapacity: 40 },
+      ).components[0]!.toJSON().components[3];
+
+    expect(teamButton("OPEN", 10)).toMatchObject({ label: "팀 짜기", disabled: true });
+    expect(teamButton("CLOSED", 9)).toMatchObject({ label: "팀 짜기", disabled: true });
+    expect(teamButton("CLOSED", 10)).toMatchObject({ label: "팀 짜기", disabled: false });
+  });
+
+  it("grants unlimited summon permission to administrators and inhouse managers", () => {
+    const interaction = (
+      roleIds: string[],
+      permissions: bigint = 0n,
+    ): RepliableInteraction =>
+      ({
+        member: { roles: roleIds },
+        memberPermissions: new PermissionsBitField(permissions),
+      }) as unknown as RepliableInteraction;
+
+    expect(
+      hasUnlimitedSummonPermission(
+        interaction([INHOUSE_MANAGER_ROLE_ID]),
+        INHOUSE_MANAGER_ROLE_ID,
+      ),
+    ).toBe(true);
+    expect(
+      hasUnlimitedSummonPermission(
+        interaction([], PermissionFlagsBits.Administrator),
+        INHOUSE_MANAGER_ROLE_ID,
+      ),
+    ).toBe(true);
+    expect(hasUnlimitedSummonPermission(interaction([]), INHOUSE_MANAGER_ROLE_ID)).toBe(
+      false,
+    );
+  });
+
+  it("places management buttons on row one and mention/summon on row two", () => {
+    const rows = buildRecruitmentButtons(7, {
+      registrationClosed: true,
+      summonReady: true,
+      teamReady: true,
+    }).map((row) => row.toJSON());
     expect(rows).toHaveLength(2);
-    expect(rows[0]?.components[3]).toMatchObject({ label: "소환 사용됨", disabled: true });
-    expect(rows[1]?.components[0]).toMatchObject({ label: "관리 (준비 중)", disabled: true });
+    expect(rows[0]?.components).toMatchObject([
+      { label: "신청하기" },
+      { label: "쫄튀하기" },
+      { label: "마감됨" },
+      { label: "팀 짜기" },
+      { label: "삭제" },
+    ]);
+    expect(rows[0]?.components[0]).toMatchObject({ disabled: true });
+    expect(rows[0]?.components[1]).toMatchObject({ disabled: true });
+    expect(rows[1]?.components).toMatchObject([
+      { label: "전체 멘션" },
+      { label: "전체 소환" },
+    ]);
+    expect(rows[1]?.components[1]).toMatchObject({ disabled: false });
+    expect(INHOUSE_ROLE_ID).toBe("1412726855517081701");
+    expect(INHOUSE_MANAGER_ROLE_ID).toBe("1542873758770135061");
   });
 });

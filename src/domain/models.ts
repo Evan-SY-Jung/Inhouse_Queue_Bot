@@ -10,6 +10,7 @@ export type RecruitmentKind = (typeof RECRUITMENT_KINDS)[number];
 
 export type PanelStatus = "CREATING" | "ACTIVE" | "CLOSED";
 export type RecruitmentStatus = "CREATING" | "OPEN" | "CLOSED";
+export type RegistrationState = "OPEN" | "CLOSED";
 export type SummonState = "AVAILABLE" | "CLAIMED" | "USED";
 
 export interface Panel {
@@ -38,6 +39,7 @@ export interface Recruitment {
   scheduledAt: number | null;
   timezoneInput: string | null;
   status: RecruitmentStatus;
+  registrationState: RegistrationState;
   summonState: SummonState;
   createdAt: number;
   closedAt: number | null;
@@ -48,7 +50,19 @@ export interface QueueMember {
   recruitmentId: number;
   userId: string;
   displayName: string;
+  riotName: string | null;
+  riotTag: string | null;
   joinedAt: number;
+}
+
+export interface AddQueueMemberInput {
+  recruitmentId: number;
+  userId: string;
+  displayName: string;
+  riotName: string;
+  riotTag: string;
+  now: number;
+  capacity: number;
 }
 
 export interface ClaimPanelInput {

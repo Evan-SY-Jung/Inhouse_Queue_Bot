@@ -8,6 +8,8 @@ import {
   ActiveRecruitmentExistsError,
   AlreadyJoinedError,
   NotJoinedError,
+  QueueFullError,
+  RegistrationClosedError,
 } from "../src/domain/errors.js";
 import { SqliteRecruitmentRepository } from "../src/db/sqliteRepository.js";
 
@@ -33,6 +35,23 @@ function createOpenRecruitment(repository: SqliteRecruitmentRepository) {
     "recruitment-channel-1",
     "recruitment-message-1",
   );
+}
+
+function addMember(
+  repository: SqliteRecruitmentRepository,
+  recruitmentId: number,
+  index: number,
+  capacity = 40,
+) {
+  return repository.addQueueMember({
+    recruitmentId,
+    userId: `member-${index}`,
+    displayName: `${index} 번째`,
+    riotName: `Riot ${index}`,
+    riotTag: `TAG${index}`,
+    now: 10 + index,
+    capacity,
+  });
 }
 
 describe("SqliteRecruitmentRepository", () => {
@@ -86,37 +105,65 @@ describe("SqliteRecruitmentRepository", () => {
     repository.close();
   });
 
-  it("keeps queue order, prevents duplicates, and allows waiters beyond 20", () => {
+  it("keeps Riot IDs and queue order, prevents duplicates, and caps at 40", () => {
     const repository = new SqliteRecruitmentRepository(":memory:");
     const recruitment = createOpenRecruitment(repository);
 
-    const first = repository.addQueueMember(recruitment.id, "member-1", "첫 번째", 10);
-    const second = repository.addQueueMember(recruitment.id, "member-2", "두 번째", 11);
+    const first = addMember(repository, recruitment.id, 1);
+    const second = addMember(repository, recruitment.id, 2);
     expect(first.position).toBe(1);
     expect(second.position).toBe(2);
     expect(second.members.map((member) => member.userId)).toEqual(["member-1", "member-2"]);
 
     expect(() =>
-      repository.addQueueMember(recruitment.id, "member-2", "두 번째", 12),
+      addMember(repository, recruitment.id, 2),
     ).toThrow(AlreadyJoinedError);
-    for (let index = 3; index <= 23; index += 1) {
-      repository.addQueueMember(
-        recruitment.id,
-        `member-${index}`,
-        `${index} 번째`,
-        10 + index,
-      );
+    for (let index = 3; index <= 40; index += 1) {
+      addMember(repository, recruitment.id, index);
     }
-    expect(repository.listQueueMembers(recruitment.id)).toHaveLength(23);
+    expect(repository.listQueueMembers(recruitment.id)).toHaveLength(40);
+    expect(repository.listQueueMembers(recruitment.id)[0]).toMatchObject({
+      riotName: "Riot 1",
+      riotTag: "TAG1",
+    });
+    expect(() => addMember(repository, recruitment.id, 41)).toThrow(QueueFullError);
 
     const removed = repository.removeQueueMember(recruitment.id, "member-1");
     expect(removed.position).toBe(1);
-    expect(removed.members).toHaveLength(22);
+    expect(removed.members).toHaveLength(39);
     expect(removed.members[0]?.userId).toBe("member-2");
-    expect(removed.members.at(-1)?.userId).toBe("member-23");
+    expect(removed.members.at(-1)?.userId).toBe("member-40");
     expect(() => repository.removeQueueMember(recruitment.id, "member-1")).toThrow(
       NotJoinedError,
     );
+    repository.close();
+  });
+
+  it("locks joins and leaves after registration closes", () => {
+    const repository = new SqliteRecruitmentRepository(":memory:");
+    const recruitment = createOpenRecruitment(repository);
+    addMember(repository, recruitment.id, 1);
+
+    const closed = repository.closeRegistration(recruitment.id);
+    expect(closed.registrationState).toBe("CLOSED");
+    expect(() => addMember(repository, recruitment.id, 2)).toThrow(
+      RegistrationClosedError,
+    );
+    expect(() => repository.removeQueueMember(recruitment.id, "member-1")).toThrow(
+      RegistrationClosedError,
+    );
+    repository.close();
+  });
+
+  it("deletes recruitment-scoped Riot IDs when the channel is deleted", () => {
+    const repository = new SqliteRecruitmentRepository(":memory:");
+    const recruitment = createOpenRecruitment(repository);
+    addMember(repository, recruitment.id, 1);
+
+    repository.closeRecruitmentByChannel(recruitment.channelId!, 100);
+
+    expect(repository.listQueueMembers(recruitment.id)).toEqual([]);
+    expect(repository.getRecruitment(recruitment.id)?.status).toBe("CLOSED");
     repository.close();
   });
 
@@ -273,6 +320,14 @@ describe("SqliteRecruitmentRepository", () => {
         created_at INTEGER NOT NULL,
         closed_at INTEGER
       );
+      CREATE TABLE queue_members (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        recruitment_id INTEGER NOT NULL REFERENCES recruitments(id),
+        user_id TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        joined_at INTEGER NOT NULL,
+        UNIQUE(recruitment_id, user_id)
+      );
       INSERT INTO panels
         (guild_id, category_id, channel_id, message_id, creator_id, status, created_at)
       VALUES
@@ -287,6 +342,9 @@ describe("SqliteRecruitmentRepository", () => {
          'RIFT', 'OPEN', 'AVAILABLE', 3),
         (1, 'guild-1', 'category-1', 'channel-3', 'message-3', 'user-3', 'ARAM_NOW',
          'ARAM', 'OPEN', 'AVAILABLE', 4);
+      INSERT INTO queue_members
+        (recruitment_id, user_id, display_name, joined_at)
+      VALUES (1, 'legacy-member', '기존 참가자', 5);
     `);
     oldDatabase.close();
 
@@ -294,6 +352,12 @@ describe("SqliteRecruitmentRepository", () => {
     expect(repository.getRecruitment(1)?.channelNumber).toBe(1);
     expect(repository.getRecruitment(2)?.channelNumber).toBe(2);
     expect(repository.getRecruitment(3)?.channelNumber).toBe(1);
+    expect(repository.getRecruitment(1)?.registrationState).toBe("OPEN");
+    expect(repository.listQueueMembers(1)[0]).toMatchObject({
+      userId: "legacy-member",
+      riotName: null,
+      riotTag: null,
+    });
     repository.close();
   });
 
@@ -397,7 +461,7 @@ describe("SqliteRecruitmentRepository", () => {
     const databasePath = join(directory, "state.sqlite");
     const firstRepository = new SqliteRecruitmentRepository(databasePath);
     const recruitment = createOpenRecruitment(firstRepository);
-    firstRepository.addQueueMember(recruitment.id, "member-1", "첫 번째", 10);
+    addMember(firstRepository, recruitment.id, 1);
     firstRepository.tryAcquireCooldown("guild-1", "ALL_MENTION", 1_000, 10_000);
     firstRepository.tryClaimSummon(recruitment.id);
     firstRepository.completeSummon(recruitment.id);

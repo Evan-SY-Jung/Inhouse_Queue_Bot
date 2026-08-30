@@ -37,3 +37,15 @@ export class NotJoinedError extends DomainError {
     super("현재 이 대기열에 참가하고 있지 않아요.", "NOT_JOINED");
   }
 }
+
+export class QueueFullError extends DomainError {
+  constructor(capacity: number) {
+    super(`이 대기열은 최대 ${capacity}명까지 참가할 수 있어요.`, "QUEUE_FULL");
+  }
+}
+
+export class RegistrationClosedError extends DomainError {
+  constructor() {
+    super("이 내전은 참가 신청이 마감됐어요.", "REGISTRATION_CLOSED");
+  }
+}

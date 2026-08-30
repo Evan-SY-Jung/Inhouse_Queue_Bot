@@ -7,11 +7,13 @@ describe("voice summon", () => {
   it("moves only the earliest members within the resolved target limit", async () => {
     const movedIds: string[] = [];
     const target = { id: "target-voice" } as VoiceChannel;
-    const members = Array.from({ length: 22 }, (_, index) => ({
+    const members = Array.from({ length: 40 }, (_, index) => ({
       sequence: index + 1,
       recruitmentId: 1,
       userId: `member-${index + 1}`,
       displayName: `멤버 ${index + 1}`,
+      riotName: `Riot ${index + 1}`,
+      riotTag: `TAG${index + 1}`,
       joinedAt: index + 1,
     })) satisfies QueueMember[];
     const states = new Map(

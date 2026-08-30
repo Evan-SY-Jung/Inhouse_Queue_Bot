@@ -2,6 +2,7 @@ import {
   ChannelType,
   Client,
   Events,
+  escapeMarkdown,
   GatewayIntentBits,
   MessageFlags,
   PermissionFlagsBits,
@@ -29,21 +30,21 @@ import {
   resolveSummonTargetLimit,
 } from "../services/queuePresentation.js";
 import {
-  parseReservationTime,
+  parseOptionalReservationTime,
   ReservationTimeError,
 } from "../services/reservationTime.js";
-import {
-  parseImmediateStartDelay,
-  scheduledAtFromDelay,
-} from "../services/immediateStart.js";
+import { parseRiotId } from "../services/riotId.js";
+import { createTeamGames, type TeamGame } from "../services/teamFormation.js";
 import {
   buildImmediateRecruitmentModal,
-  buildReservationModal,
+  buildJoinModal,
   buildSetupModal,
   buildSummonModal,
 } from "./components.js";
 import {
   ALL_MENTION_COOLDOWN_KEY,
+  INHOUSE_MANAGER_ROLE_ID,
+  INHOUSE_ROLE_ID,
   MENTION_MESSAGE_LIFETIME_MS,
   PANEL_CHANNEL_NAME,
   RECRUITMENT_THREAD_NAME,
@@ -57,6 +58,8 @@ import {
   asCategory,
   assertBotCanCreateRecruitments,
   buildRecruitmentPermissionOverwrites,
+  hasUnlimitedSummonPermission,
+  interactionHasRole,
   isAdministrator,
   parseSnowflake,
 } from "./helpers.js";
@@ -150,18 +153,22 @@ export class BotController {
         await this.handleImmediateRecruitmentButton(interaction, customId.id, "ARAM");
         return;
       case "panel-reservation": {
-        this.requirePanelInteraction(interaction, customId.id);
-        if (!isAdministrator(interaction)) {
-          throw new DomainError("현재 내전 예약은 관리자만 가능해요.", "ADMIN_ONLY");
-        }
-        await interaction.showModal(buildReservationModal(customId.id));
-        return;
+        throw new DomainError(
+          "내전 예약은 협곡 또는 아람 모집 버튼에서 날짜·시간·타임존을 입력해 만들 수 있어요.",
+          "RESERVATION_MOVED",
+        );
       }
       case "join":
-        await this.handleJoin(interaction, customId.id);
+        await this.handleJoinRequest(interaction, customId.id);
         return;
       case "leave":
         await this.handleLeave(interaction, customId.id);
+        return;
+      case "close":
+        await this.handleCloseRegistration(interaction, customId.id);
+        return;
+      case "teams":
+        await this.handleTeamFormation(interaction, customId.id);
         return;
       case "mention":
         await this.handleMention(interaction, customId.id);
@@ -173,7 +180,7 @@ export class BotController {
         await this.handleDelete(interaction, customId.id);
         return;
       case "manage":
-        throw new DomainError("해당 기능은 아직 준비중이에요.", "NOT_IMPLEMENTED");
+        throw new DomainError("이전 관리 버튼은 더 이상 사용하지 않아요.", "MOVED_FEATURE");
       default:
         return;
     }
@@ -194,9 +201,14 @@ export class BotController {
           customId.gameType,
         );
         return;
-      case "reservation":
-        await this.handleReservationModal(interaction, customId.id);
+      case "join-submit":
+        await this.handleJoinModal(interaction, customId.id);
         return;
+      case "reservation":
+        throw new DomainError(
+          "이전 예약 모달은 만료됐어요. 협곡 또는 아람 모집 버튼을 다시 눌러 주세요.",
+          "RESERVATION_MOVED",
+        );
       case "summon-confirm":
         await this.handleSummonConfirmation(interaction, customId.id);
         return;
@@ -280,14 +292,12 @@ export class BotController {
     gameType: GameType,
   ): Promise<void> {
     const panel = this.requirePanelInteraction(interaction, panelId);
-    const selectedDelay = interaction.fields.getStringSelectValues("start_delay")[0];
-    const delayMinutes = parseImmediateStartDelay(selectedDelay);
-    if (selectedDelay && delayMinutes === null) {
-      throw new DomainError(
-        "시작 시간은 제공된 분 단위 옵션에서 선택해 주세요.",
-        "INVALID_START_DELAY",
-      );
-    }
+    const selectedTimezone = interaction.fields.getStringSelectValues("timezone")[0] ?? "";
+    const reservation = parseOptionalReservationTime(
+      interaction.fields.getTextInputValue("date"),
+      interaction.fields.getTextInputValue("time"),
+      selectedTimezone,
+    );
     const description = interaction.fields.getTextInputValue("description").trim();
     const now = Date.now();
 
@@ -300,48 +310,9 @@ export class BotController {
       kind: gameType === "RIFT" ? "RIFT_NOW" : "ARAM_NOW",
       gameType,
       description: description || null,
-      scheduledAt: scheduledAtFromDelay(now, delayMinutes),
+      scheduledAt: reservation?.scheduledAt ?? null,
+      timezoneInput: reservation?.timezoneLabel ?? null,
       now,
-    });
-  }
-
-  private async handleReservationModal(
-    interaction: ModalSubmitInteraction,
-    panelId: number,
-  ): Promise<void> {
-    const panel = this.requirePanelInteraction(interaction, panelId);
-    if (!isAdministrator(interaction)) {
-      throw new DomainError("현재 내전 예약은 관리자만 가능해요", "ADMIN_ONLY");
-    }
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-    const selectedGameType = interaction.fields.getStringSelectValues("game_type")[0];
-    if (selectedGameType !== "RIFT" && selectedGameType !== "ARAM") {
-      throw new DomainError("협곡 또는 아람을 선택해 주세요.", "INVALID_GAME_TYPE");
-    }
-    const gameType: GameType = selectedGameType;
-    const selectedTimezone = interaction.fields.getStringSelectValues("timezone")[0];
-    if (!selectedTimezone) {
-      throw new DomainError("타임존을 선택해 주세요.", "INVALID_TIMEZONE");
-    }
-    const parsedTime = parseReservationTime(
-      interaction.fields.getTextInputValue("date"),
-      interaction.fields.getTextInputValue("time"),
-      selectedTimezone,
-    );
-    const description = interaction.fields.getTextInputValue("description").trim();
-
-    await this.createRecruitment(interaction, panel, {
-      panelId: panel.id,
-      guildId: panel.guildId,
-      categoryId: panel.categoryId,
-      creatorId: interaction.user.id,
-      kind: "RESERVATION",
-      gameType,
-      description: description || null,
-      scheduledAt: parsedTime.scheduledAt,
-      timezoneInput: parsedTime.timezoneLabel,
-      now: Date.now(),
     });
   }
 
@@ -391,22 +362,43 @@ export class BotController {
     await interaction.editReply(`내전 대기열이 성공적으로 생성되었어요!: <#${channel.id}>`);
   }
 
-  private async handleJoin(interaction: ButtonInteraction, recruitmentId: number): Promise<void> {
+  private async handleJoinRequest(
+    interaction: ButtonInteraction,
+    recruitmentId: number,
+  ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
+    this.requireOpenRegistration(recruitment);
+    this.requireInhouseRole(interaction);
+    await interaction.showModal(buildJoinModal(recruitment.id));
+  }
+
+  private async handleJoinModal(
+    interaction: ModalSubmitInteraction,
+    recruitmentId: number,
+  ): Promise<void> {
+    const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
+    this.requireOpenRegistration(recruitment);
+    this.requireInhouseRole(interaction);
+    const riotId = parseRiotId(
+      interaction.fields.getTextInputValue("riot_name"),
+      interaction.fields.getTextInputValue("riot_tag"),
+    );
     const guild = this.requireGuild(interaction);
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const member = await guild.members.fetch(interaction.user.id);
-    const result = this.repository.addQueueMember(
-      recruitment.id,
-      interaction.user.id,
-      member.displayName,
-      Date.now(),
-    );
+    const result = this.repository.addQueueMember({
+      recruitmentId: recruitment.id,
+      userId: interaction.user.id,
+      displayName: member.displayName,
+      riotName: riotId.name,
+      riotTag: riotId.tag,
+      now: Date.now(),
+      capacity: this.config.queueCapacity,
+    });
     const refreshWarning = await this.stateService.tryRefreshRecruitmentMessage(recruitment.id);
     const positionMessage = formatQueuePosition(
       result.position,
       this.config.callSize,
-      this.config.queueCapacity,
     );
     await interaction.editReply(`참가 완료! ${positionMessage}${refreshWarning}`);
   }
@@ -417,6 +409,49 @@ export class BotController {
     this.repository.removeQueueMember(recruitment.id, interaction.user.id);
     const refreshWarning = await this.stateService.tryRefreshRecruitmentMessage(recruitment.id);
     await interaction.editReply(`이걸 쫄튀하네 ㅋ.${refreshWarning}`);
+  }
+
+  private async handleCloseRegistration(
+    interaction: ButtonInteraction,
+    recruitmentId: number,
+  ): Promise<void> {
+    const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
+    this.requireCreatorOrAdministrator(interaction, recruitment, "마감");
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    this.repository.closeRegistration(recruitment.id);
+    const refreshWarning = await this.stateService.tryRefreshRecruitmentMessage(recruitment.id);
+    await interaction.editReply(`참가 신청을 마감했어요.${refreshWarning}`);
+  }
+
+  private async handleTeamFormation(
+    interaction: ButtonInteraction,
+    recruitmentId: number,
+  ): Promise<void> {
+    const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
+    this.requireCreatorOrAdministrator(interaction, recruitment, "팀 짜기");
+    if (recruitment.registrationState !== "CLOSED") {
+      throw new DomainError("먼저 참가 신청을 마감해 주세요.", "REGISTRATION_STILL_OPEN");
+    }
+
+    const members = this.repository.listQueueMembers(recruitment.id);
+    const games = createTeamGames(
+      members,
+      this.config.callSize,
+      this.config.callSize * 2,
+    );
+    if (games.length === 0) {
+      throw new DomainError(
+        `팀을 짜려면 최소 ${this.config.callSize}명이 필요해요.`,
+        "NOT_ENOUGH_MEMBERS",
+      );
+    }
+
+    const assignedCount = games.length * this.config.callSize;
+    const excludedCount = members.length - assignedCount;
+    await interaction.reply({
+      content: formatTeamGames(games, excludedCount),
+      allowedMentions: { parse: [] },
+    });
   }
 
   private async handleMention(interaction: ButtonInteraction, recruitmentId: number): Promise<void> {
@@ -436,7 +471,7 @@ export class BotController {
     );
     if (!cooldown.acquired) {
       throw new DomainError(
-        `서버 올 멘션 쿨타임이에요. 약 ${Math.ceil(cooldown.remainingMs / 1_000)}초 뒤에 다시 시도해 주세요.`,
+        `서버 전체 멘션 쿨타임이에요. 약 ${Math.ceil(cooldown.remainingMs / 1_000)}초 뒤에 다시 시도해 주세요.`,
         "MENTION_COOLDOWN",
       );
     }
@@ -457,8 +492,9 @@ export class BotController {
     recruitmentId: number,
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
-    this.requireCreatorOrAdministrator(interaction, recruitment, "올 소환");
-    if (recruitment.summonState !== "AVAILABLE") {
+    const unlimited = this.hasUnlimitedSummonAccess(interaction);
+    this.requireSummonOperator(interaction, recruitment, unlimited);
+    if (!unlimited && recruitment.summonState !== "AVAILABLE") {
       throw new DomainError("올 소환은 이 모집에서 이미 사용됐어요.", "SUMMON_ALREADY_USED");
     }
     const members = this.repository.listQueueMembers(recruitment.id);
@@ -473,8 +509,9 @@ export class BotController {
     interaction: ModalSubmitInteraction,
     recruitmentId: number,
   ): Promise<void> {
-    const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId, false);
-    this.requireCreatorOrAdministrator(interaction, recruitment, "올 소환");
+    const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
+    const unlimited = this.hasUnlimitedSummonAccess(interaction);
+    this.requireSummonOperator(interaction, recruitment, unlimited);
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     if (
@@ -503,7 +540,7 @@ export class BotController {
 
     const queue = this.repository.listQueueMembers(recruitment.id);
     const summonLimit = this.requireSummonTargetLimit(queue.length);
-    if (!this.repository.tryClaimSummon(recruitment.id)) {
+    if (!unlimited && !this.repository.tryClaimSummon(recruitment.id)) {
       throw new DomainError("올 소환이 이미 사용됐거나 현재 처리 중이에요.", "SUMMON_ALREADY_USED");
     }
 
@@ -516,19 +553,21 @@ export class BotController {
         limit: summonLimit,
         reason: `내전 모집 #${recruitment.id} 올 소환`,
       });
-      if (summonResult.movedIds.length > 0) {
-        this.repository.completeSummon(recruitment.id);
-      } else {
-        this.repository.releaseSummonClaim(recruitment.id);
+      if (!unlimited) {
+        if (summonResult.movedIds.length > 0) {
+          this.repository.completeSummon(recruitment.id);
+        } else {
+          this.repository.releaseSummonClaim(recruitment.id);
+        }
       }
     } catch (error) {
-      this.repository.releaseSummonClaim(recruitment.id);
+      if (!unlimited) this.repository.releaseSummonClaim(recruitment.id);
       throw error;
     }
 
     const moved = summonResult.movedIds.length;
     const refreshWarning =
-      moved > 0
+      moved > 0 && !unlimited
         ? await this.stateService.tryRefreshRecruitmentMessage(recruitment.id)
         : "";
     let logWarning = "";
@@ -549,8 +588,9 @@ export class BotController {
         logWarning = "\n⚠️ 음성 이동은 완료됐지만 채널에 소환 기록을 남기지 못했어요.";
       }
     }
-    const usageMessage =
-      moved > 0
+    const usageMessage = unlimited
+      ? "관리자 권한으로 횟수 제한 없이 올 소환을 실행했어요."
+      : moved > 0
         ? "올 소환 사용을 완료했어요."
         : "실제로 이동한 사람이 없어 사용 횟수는 소모하지 않았어요.";
     await interaction.editReply(
@@ -621,11 +661,42 @@ export class BotController {
     }
   }
 
+  private requireOpenRegistration(recruitment: Recruitment): void {
+    if (recruitment.registrationState !== "OPEN") {
+      throw new DomainError("이 내전은 참가 신청이 마감됐어요.", "REGISTRATION_CLOSED");
+    }
+  }
+
+  private requireInhouseRole(interaction: RecruitmentInteraction): void {
+    if (!interactionHasRole(interaction, INHOUSE_ROLE_ID)) {
+      throw new DomainError(
+        `내전 역할(<@&${INHOUSE_ROLE_ID}>)이 있어야 신청할 수 있어요.`,
+        "INHOUSE_ROLE_REQUIRED",
+      );
+    }
+  }
+
+  private requireSummonOperator(
+    interaction: RecruitmentInteraction,
+    recruitment: Recruitment,
+    unlimited: boolean,
+  ): void {
+    if (interaction.user.id !== recruitment.creatorId && !unlimited) {
+      throw new DomainError(
+        "올 소환은 모집 생성자, 관리자 또는 내전관리자만 사용할 수 있어요.",
+        "SUMMON_OPERATOR_ONLY",
+      );
+    }
+  }
+
+  private hasUnlimitedSummonAccess(interaction: RecruitmentInteraction): boolean {
+    return hasUnlimitedSummonPermission(interaction, INHOUSE_MANAGER_ROLE_ID);
+  }
+
   private requireSummonTargetLimit(memberCount: number): number {
     const limit = resolveSummonTargetLimit(
       memberCount,
       this.config.callSize,
-      this.config.queueCapacity,
     );
     if (limit === 0) {
       throw new DomainError(
@@ -674,4 +745,31 @@ export class BotController {
       console.error("오류 응답 전송 실패", responseError);
     }
   }
+}
+
+function formatTeamGames(games: TeamGame[], excludedCount: number): string {
+  const lines = ["# ⚔️ 내전 팀 편성 결과"];
+  for (const game of games) {
+    lines.push(
+      "",
+      `## ${game.gameNumber}경기`,
+      "**🔵 블루팀**",
+      ...game.blue.map((member, index) => formatTeamMember(member, index)),
+      "**🔴 레드팀**",
+      ...game.red.map((member, index) => formatTeamMember(member, index)),
+    );
+  }
+  if (excludedCount > 0) {
+    lines.push("", `-# 후순위 ${excludedCount}명은 이번 팀 편성에서 제외됐어요.`);
+  }
+  return lines.join("\n");
+}
+
+function formatTeamMember(
+  member: TeamGame["blue"][number],
+  index: number,
+): string {
+  const name = escapeMarkdown((member.riotName ?? member.displayName).slice(0, 20));
+  const tag = member.riotTag ? ` #${escapeMarkdown(member.riotTag.slice(0, 8))}` : "";
+  return `${index + 1}. ${name}${tag} (<@${member.userId}>)`;
 }

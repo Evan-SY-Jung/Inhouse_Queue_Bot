@@ -30,12 +30,13 @@ export function buildRecruitmentMessagePayload(
     ],
     components: buildRecruitmentButtons(
       recruitment.id,
-      recruitment.summonState === "USED",
-      resolveSummonTargetLimit(
-        members.length,
-        config.callSize,
-        config.queueCapacity,
-      ) > 0,
+      {
+        registrationClosed: recruitment.registrationState === "CLOSED",
+        summonReady: resolveSummonTargetLimit(members.length, config.callSize) > 0,
+        teamReady:
+          recruitment.registrationState === "CLOSED" &&
+          resolveSummonTargetLimit(members.length, config.callSize) > 0,
+      },
     ),
     allowedMentions: { parse: [] },
   } as const;

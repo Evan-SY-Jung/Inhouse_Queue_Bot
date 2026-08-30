@@ -32,6 +32,8 @@ const SCHEMA = `
     scheduled_at INTEGER,
     timezone_input TEXT,
     status TEXT NOT NULL CHECK (status IN ('CREATING', 'OPEN', 'CLOSED')),
+    registration_state TEXT NOT NULL DEFAULT 'OPEN'
+      CHECK (registration_state IN ('OPEN', 'CLOSED')),
     summon_state TEXT NOT NULL DEFAULT 'AVAILABLE'
       CHECK (summon_state IN ('AVAILABLE', 'CLAIMED', 'USED')),
     created_at INTEGER NOT NULL,
@@ -47,6 +49,8 @@ const SCHEMA = `
     recruitment_id INTEGER NOT NULL REFERENCES recruitments(id),
     user_id TEXT NOT NULL,
     display_name TEXT NOT NULL,
+    riot_name TEXT,
+    riot_tag TEXT,
     joined_at INTEGER NOT NULL,
     UNIQUE(recruitment_id, user_id)
   );
@@ -92,12 +96,28 @@ const CHANNEL_NUMBER_MIGRATION = `
 
 export function initializeSqliteSchema(db: DatabaseSync): void {
   db.exec(SCHEMA);
-  const columns = db
+  const recruitmentColumns = db
     .prepare("PRAGMA table_info(recruitments)")
     .all()
     .map((row) => String((row as { name: unknown }).name));
-  if (!columns.includes("channel_number")) {
+  if (!recruitmentColumns.includes("channel_number")) {
     db.exec("ALTER TABLE recruitments ADD COLUMN channel_number INTEGER");
+  }
+  if (!recruitmentColumns.includes("registration_state")) {
+    db.exec(
+      "ALTER TABLE recruitments ADD COLUMN registration_state TEXT NOT NULL DEFAULT 'OPEN'",
+    );
+  }
+
+  const queueColumns = db
+    .prepare("PRAGMA table_info(queue_members)")
+    .all()
+    .map((row) => String((row as { name: unknown }).name));
+  if (!queueColumns.includes("riot_name")) {
+    db.exec("ALTER TABLE queue_members ADD COLUMN riot_name TEXT");
+  }
+  if (!queueColumns.includes("riot_tag")) {
+    db.exec("ALTER TABLE queue_members ADD COLUMN riot_tag TEXT");
   }
   db.exec(CHANNEL_NUMBER_MIGRATION);
 }

@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import { describe, expect, it } from "vitest";
 import {
+  parseOptionalReservationTime,
   parseReservationTime,
   ReservationTimeError,
 } from "../src/services/reservationTime.js";
@@ -8,6 +9,30 @@ import {
 const NOW = DateTime.fromISO("2026-08-24T00:00:00Z").toMillis();
 
 describe("parseReservationTime", () => {
+  it("treats three empty scheduling fields as an immediate recruitment", () => {
+    expect(parseOptionalReservationTime("", "", "", NOW)).toBeNull();
+    expect(parseOptionalReservationTime("  ", "  ", "  ", NOW)).toBeNull();
+  });
+
+  it.each([
+    ["12/31/2026", "", ""],
+    ["", "21:30", ""],
+    ["", "", "PST"],
+    ["12/31/2026", "21:30", ""],
+    ["12/31/2026", "", "PST"],
+    ["", "21:30", "PST"],
+  ])("rejects a partial optional schedule", (date, time, zone) => {
+    expect(() => parseOptionalReservationTime(date, time, zone, NOW)).toThrow(
+      /날짜, 시간, 타임존을 모두 입력/,
+    );
+  });
+
+  it("parses an optional schedule only when all three fields exist", () => {
+    const result = parseOptionalReservationTime("12/31/2026", "21:30", "PST", NOW);
+    expect(result?.timezoneLabel).toBe("PST");
+    expect(result?.scheduledAt).toBeGreaterThan(NOW);
+  });
+
   it("parses MM/DD/YYYY, 24-hour time, and dynamic Pacific time", () => {
     const result = parseReservationTime("12/31/2026", "21:30", "PST", NOW);
     expect(result.resolvedZone).toBe("America/Los_Angeles");

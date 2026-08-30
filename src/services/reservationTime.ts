@@ -6,6 +6,26 @@ export interface ParsedReservationTime {
   resolvedZone: string;
 }
 
+export function parseOptionalReservationTime(
+  dateInput: string,
+  timeInput: string,
+  timezoneInput: string,
+  now = Date.now(),
+): ParsedReservationTime | null {
+  const date = dateInput.trim();
+  const time = timeInput.trim();
+  const timezone = timezoneInput.trim();
+  const providedCount = [date, time, timezone].filter(Boolean).length;
+
+  if (providedCount === 0) return null;
+  if (providedCount !== 3) {
+    throw new ReservationTimeError(
+      "예약하려면 날짜, 시간, 타임존을 모두 입력해 주세요. 예약하지 않으려면 세 항목을 모두 비워 주세요.",
+    );
+  }
+  return parseReservationTime(date, time, timezone, now);
+}
+
 const ZONE_ALIASES: Readonly<Record<string, string>> = {
   UTC: "UTC",
   GMT: "UTC",

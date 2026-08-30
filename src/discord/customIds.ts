@@ -11,7 +11,10 @@ export const customIds = {
     `${PREFIX}:immediate:${gameType.toLowerCase()}:${panelId}`,
   reservationModal: (panelId: number) => `${PREFIX}:reservation:${panelId}`,
   join: (recruitmentId: number) => `${PREFIX}:join:${recruitmentId}`,
+  joinModal: (recruitmentId: number) => `${PREFIX}:join-submit:${recruitmentId}`,
   leave: (recruitmentId: number) => `${PREFIX}:leave:${recruitmentId}`,
+  close: (recruitmentId: number) => `${PREFIX}:close:${recruitmentId}`,
+  teams: (recruitmentId: number) => `${PREFIX}:teams:${recruitmentId}`,
   mention: (recruitmentId: number) => `${PREFIX}:mention:${recruitmentId}`,
   summon: (recruitmentId: number) => `${PREFIX}:summon:${recruitmentId}`,
   summonModal: (recruitmentId: number) => `${PREFIX}:summon-confirm:${recruitmentId}`,
@@ -25,9 +28,10 @@ export type ParsedCustomId =
   | { action: "immediate"; id: number; gameType: GameType }
   | { action: "reservation"; id: number }
   | {
-      action: "join" | "leave" | "mention" | "summon" | "delete" | "manage";
+      action: "join" | "leave" | "close" | "teams" | "mention" | "summon" | "delete" | "manage";
       id: number;
     }
+  | { action: "join-submit"; id: number }
   | { action: "summon-confirm"; id: number };
 
 export function parseCustomId(value: string): ParsedCustomId | null {
@@ -54,6 +58,14 @@ export function parseCustomId(value: string): ParsedCustomId | null {
     if (parts[2] === "aram") return { action: "immediate", id, gameType: "ARAM" };
   }
   if (
+    parts[1] === "join-submit" &&
+    parts.length === 3 &&
+    Number.isSafeInteger(id) &&
+    id > 0
+  ) {
+    return { action: "join-submit", id };
+  }
+  if (
     parts[1] === "summon-confirm" &&
     parts.length === 3 &&
     Number.isSafeInteger(id) &&
@@ -62,7 +74,16 @@ export function parseCustomId(value: string): ParsedCustomId | null {
     return { action: "summon-confirm", id };
   }
 
-  const actions = ["join", "leave", "mention", "summon", "delete", "manage"] as const;
+  const actions = [
+    "join",
+    "leave",
+    "close",
+    "teams",
+    "mention",
+    "summon",
+    "delete",
+    "manage",
+  ] as const;
   if (
     parts.length === 3 &&
     actions.includes(parts[1] as (typeof actions)[number]) &&
