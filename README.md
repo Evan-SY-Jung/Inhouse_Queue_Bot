@@ -1,6 +1,6 @@
 # CR 내전 참여 대기열 Discord 봇
 
-Discord 서버에서 협곡·아람 내전을 즉시 또는 예약 시간으로 모집하고, 최대 40명의 명단과 팀 편성을 실시간으로 관리하는 봇입니다.
+Discord 서버에서 협곡·아람 내전을 즉시 또는 예약 시간으로 모집하고, 최대 40명의 명단과 Riot 티어 기반 웹 팀 편성을 관리하는 봇입니다.
 
 ## 구현된 기능
 
@@ -48,8 +48,14 @@ Discord 서버에서 협곡·아람 내전을 즉시 또는 예약 시간으로 
   - 모집 생성자, Discord 관리자 또는 `내전관리자` 역할만 마감·재오픈과 팀 짜기 사용 가능
   - `마감하기`를 누르면 추가 신청과 이탈을 잠그고 버튼을 `재오픈`으로 변경
   - `재오픈`을 누르면 신청과 이탈을 다시 허용하고 버튼을 `마감하기`로 복원
-  - 마감 후 선착순 10명은 무작위 5:5 한 경기, 20명 이상은 선착순 20명으로 두 경기를 편성
-  - 11~19명의 후순위와 20명 초과 인원은 팀 편성에서 제외
+  - 마감 후 `팀 짜기`를 누르면 누른 운영자에게만 GitHub Pages 팀 편성 링크를 비공개로 전송
+  - 선착순 10명은 5:5 한 경기, 20명 이상은 선착순 20명으로 두 경기 편성판 생성
+  - 11~19명의 후순위와 20명 초과 인원은 편성판에서 제외
+  - 정멤은 Discord 표시 이름 + 고정 태그 `클로버`, 신입·외부인은 신청 때 입력한 Riot ID로 티어 조회
+  - 솔로 랭크를 우선하고, 없으면 자유 랭크, 둘 다 없으면 언랭으로 표시
+  - Riot API 키가 없거나 개별 조회가 실패해도 편성판은 열리고 해당 카드만 미조회로 표시
+  - 이름표 포인터 드래그, 팀 칸 자석 스냅, 티어 균형 배치, 랜덤 배치, 세션 복구, Discord 결과 복사 지원
+  - 참가자 데이터는 만료 시간이 있는 압축 URL 조각에만 들어가며 Riot API 키와 Discord 토큰은 웹으로 전달하지 않음
 - 전체 멘션
   - 모집 생성자, Discord 관리자 또는 `내전관리자` 역할만 사용 가능
   - 대기열에 한 명 이상 있으면 사용 가능
@@ -131,9 +137,13 @@ npm run dev
 - `src/discord/voiceSummon.ts` — 음성 채널 이동과 결과 집계
 - `src/services/queuePresentation.ts` — 참가 순번과 멘션·소환 선착순 대상 계산
 - `src/services/riotId.ts` — 모집별 라이엇 닉네임·태그 검증
+- `src/services/riotApi.ts` — Account/Summoner/League API 티어 조회, 속도 제한, 메모리 캐시
+- `src/services/teamBuilder.ts` — 정멤 Riot ID 해석과 압축·만료형 팀 편성 세션 링크 생성
 - `src/services/teamFormation.ts` — 선착순 10/20명의 무작위 5:5 팀 편성
 - `src/db/sqliteSchema.ts` — SQLite 스키마와 마이그레이션
 - `src/db/sqliteRepository.ts` — DB 읽기·쓰기와 트랜잭션
+- `web/` — GitHub Pages용 드래그 팀 편성 화면(정적 HTML/CSS/JavaScript)
+- `.github/workflows/pages.yml` — `web/` 자동 GitHub Pages 배포
 
 ## 요구 환경
 
@@ -186,9 +196,18 @@ DISCORD_GUILD_ID=테스트_서버_ID
 DATABASE_PATH=./data/cr-inhouse.sqlite
 CALL_SIZE=10
 MENTION_COOLDOWN_SECONDS=10
+RIOT_API_KEY=Riot_Developer_Portal_API_키
+RIOT_REGIONAL_ROUTE=americas
+RIOT_PLATFORM_ROUTE=na1
+RIOT_RANK_CACHE_MINUTES=15
+MEMBER_RIOT_TAG=클로버
+TEAM_BUILDER_BASE_URL=https://evan-sy-jung.github.io/Inhouse_Queue_Bot/
+TEAM_BUILDER_SESSION_MINUTES=60
 ```
 
 토큰은 채팅, Git, 스크린샷에 노출하지 마세요. 노출되었다면 Developer Portal에서 즉시 재발급해야 합니다.
+
+`RIOT_API_KEY`는 [Riot Developer Portal](https://developer.riotgames.com/)에서 발급합니다. 개발용 키는 만료될 수 있으므로 운영 중 티어가 전부 `API 미설정` 또는 `조회 실패`로 보이면 키 상태부터 확인하세요. 키를 비워도 기존 모집·신청·소환 기능과 수동 팀 편성판은 계속 동작합니다.
 
 테스트 서버에 Slash Command를 등록하고 봇을 시작합니다.
 
@@ -198,6 +217,17 @@ npm run dev
 ```
 
 `DISCORD_GUILD_ID`가 있으면 해당 서버에만 등록되어 즉시 반영됩니다. 실제 운영 전환 시 이 값을 비우고 `npm run deploy:commands:dev`를 다시 실행하면 전역 명령어로 등록됩니다.
+
+## GitHub Pages 팀 편성판 배포
+
+정적 화면은 같은 저장소의 `web/`에 있으며 `main`에 변경이 푸시되면 `.github/workflows/pages.yml`이 자동 배포합니다. 최초 한 번만 GitHub 저장소에서 아래 설정이 필요합니다.
+
+1. GitHub 저장소의 **Settings** → **Pages**로 이동합니다.
+2. **Build and deployment**의 **Source**를 **GitHub Actions**로 선택합니다.
+3. **Actions** 탭의 `Deploy team builder to GitHub Pages` 실행이 성공했는지 확인합니다.
+4. 공개 주소 `https://evan-sy-jung.github.io/Inhouse_Queue_Bot/`가 열리는지 확인합니다.
+
+다른 주소를 사용하면 봇 서버의 `TEAM_BUILDER_BASE_URL`도 같은 주소로 바꿔야 합니다. 웹페이지는 Riot API를 직접 호출하지 않습니다. 봇 프로세스만 API 키를 보유하고 티어까지 조회한 뒤, 최대 20명의 표시용 데이터만 브라우저에서 해제하는 URL 조각(`#s=...`)으로 전달합니다. 링크를 받은 사람은 그 참가자 정보를 볼 수 있으므로 공개 채널에 링크 자체를 다시 올리지 않는 것이 좋습니다.
 
 ## Docker 실행
 
@@ -225,11 +255,12 @@ DB 파일은 호스트의 `./data` 폴더에 유지됩니다.
 
 ```bash
 npm run typecheck
+npm run check:web
 npm test
 npm run build
 ```
 
-자동 테스트는 DB 생성 제한과 기존 DB 마이그레이션, 게임별 열린 채널 순번 재사용, 최초 `@here` 알림, 선택형 예약 입력 조합, 40명 상한과 2행 명단, 선택형 라이엇 ID 저장·삭제, 신청 마감·재오픈, 생성자·관리자·내전관리자 권한과 내전 역할 제한, 10/20명 소환 대상 제한, 관리자 무제한 소환 권한, 5:5 팀 편성, 중복 참가, 서버 쿨타임, 임베드 항목 추가·삭제·빈 설정·이전 버전 호환, 모달 셀렉트와 채널 권한, 버튼 ID 라우팅을 검사합니다.
+자동 테스트는 DB 생성 제한과 기존 DB 마이그레이션, 게임별 열린 채널 순번 재사용, 최초 `@here` 알림, 선택형 예약 입력 조합, 40명 상한과 2행 명단, 선택형 라이엇 ID 저장·삭제, 신청 마감·재오픈, 생성자·관리자·내전관리자 권한과 내전 역할 제한, 10/20명 소환 대상 제한, 관리자 무제한 소환 권한, Riot API 조회·캐시·실패 격리, 정멤/신입 Riot ID 해석, 압축 팀 편성 링크, 5:5 팀 편성, 중복 참가, 서버 쿨타임, 임베드 항목 추가·삭제·빈 설정·이전 버전 호환, 모달 셀렉트와 채널 권한, 버튼 ID 라우팅을 검사합니다.
 
 실제 Discord 서버에서 확인할 항목은 [docs/LIVE_TEST_CHECKLIST.md](docs/LIVE_TEST_CHECKLIST.md)에 정리되어 있습니다.
 

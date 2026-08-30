@@ -1,0 +1,120 @@
+import { describe, expect, it } from "vitest";
+import type { QueueMember, Recruitment } from "../src/domain/models.js";
+import type { RiotRankLookup } from "../src/services/riotApi.js";
+import {
+  decodeTeamBuilderSession,
+  resolveQueueMemberRiotId,
+  TeamBuilderService,
+} from "../src/services/teamBuilder.js";
+
+const recruitment: Pick<Recruitment, "id" | "gameType"> = {
+  id: 77,
+  gameType: "RIFT",
+};
+
+function members(count: number): QueueMember[] {
+  return Array.from({ length: count }, (_, index) => ({
+    sequence: index + 1,
+    recruitmentId: recruitment.id,
+    userId: `user-${index + 1}`,
+    displayName: `정멤${index + 1}`,
+    riotName: index === 1 ? "신입롤닉" : null,
+    riotTag: index === 1 ? "NEW1" : null,
+    joinedAt: index + 1,
+  }));
+}
+
+const rankLookup: RiotRankLookup = {
+  async lookupMany(riotIds) {
+    return riotIds.map((riotId, index) => ({
+      riotName: riotId.name,
+      riotTag: riotId.tag,
+      status: index === 2 ? "UNRANKED" : "RANKED",
+      queue: index === 2 ? null : "SOLO",
+      tier: index === 2 ? null : "GOLD",
+      division: index === 2 ? null : "II",
+      leaguePoints: index === 2 ? null : 50,
+    }));
+  },
+};
+
+describe("team builder session", () => {
+  it("uses submitted IDs for guests and Discord names with the fixed tag for members", () => {
+    expect(resolveQueueMemberRiotId(members(2)[0]!, "클로버")).toEqual({
+      name: "정멤1",
+      tag: "클로버",
+    });
+    expect(resolveQueueMemberRiotId(members(2)[1]!, "클로버")).toEqual({
+      name: "신입롤닉",
+      tag: "NEW1",
+    });
+    expect(
+      resolveQueueMemberRiotId(
+        { displayName: "DisplayName#NA1", riotName: null, riotTag: null },
+        "클로버",
+      ),
+    ).toEqual({ name: "DisplayName", tag: "NA1" });
+  });
+
+  it("encodes the first complete game into an expiring URL fragment", async () => {
+    const service = new TeamBuilderService(rankLookup, {
+      baseUrl: "https://example.github.io/Inhouse_Queue_Bot/",
+      fixedMemberTag: "클로버",
+      callSize: 10,
+      sessionTtlMs: 60 * 60 * 1_000,
+      now: () => 1_800_000_000_000,
+    });
+
+    const result = await service.createLink(recruitment, members(13));
+    const url = new URL(result.url);
+    const session = decodeTeamBuilderSession(url.hash.slice("#s=".length));
+
+    expect(url.origin + url.pathname).toBe("https://example.github.io/Inhouse_Queue_Bot/");
+    expect(result).toMatchObject({
+      selectedCount: 10,
+      excludedCount: 3,
+      rankedCount: 9,
+      unrankedCount: 1,
+      unavailableCount: 0,
+    });
+    expect(session).toMatchObject({
+      version: 1,
+      recruitmentId: 77,
+      gameType: "RIFT",
+      generatedAt: 1_800_000_000,
+      expiresAt: 1_800_003_600,
+      teamSize: 5,
+      excludedCount: 3,
+    });
+    expect(session.players).toHaveLength(10);
+    expect(session.players[0]).toMatchObject({
+      displayName: "정멤1",
+      riotName: "정멤1",
+      riotTag: "클로버",
+      tier: "GOLD",
+    });
+    expect(session.players[1]).toMatchObject({
+      displayName: "정멤2",
+      riotName: "신입롤닉",
+      riotTag: "NEW1",
+    });
+    expect(result.url).not.toContain("secret");
+  });
+
+  it("caps a full queue at the first two games", async () => {
+    const service = new TeamBuilderService(rankLookup, {
+      baseUrl: "https://example.github.io/Inhouse_Queue_Bot/",
+      fixedMemberTag: "클로버",
+      callSize: 10,
+      sessionTtlMs: 300_000,
+    });
+
+    const result = await service.createLink(recruitment, members(40));
+    const session = decodeTeamBuilderSession(new URL(result.url).hash.slice("#s=".length));
+
+    expect(result.selectedCount).toBe(20);
+    expect(result.excludedCount).toBe(20);
+    expect(session.players).toHaveLength(20);
+    expect(result.url.length).toBeLessThan(1_700);
+  });
+});

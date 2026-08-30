@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta
+      name="description"
+      content="CR Discord 내전 참가자를 드래그해 팀을 편성하는 보드"
+    />
+    <title>CR 내전 팀 편성판</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand-block">
+        <div class="brand-mark" aria-hidden="true">CR</div>
+        <div>
+          <p class="eyebrow">INHOUSE CONTROL ROOM</p>
+          <h1>팀 밸런스 보드</h1>
+        </div>
+      </div>
+      <div class="session-summary" id="sessionSummary" hidden>
+        <span class="summary-item" id="gameBadge">협곡</span>
+        <span class="summary-item" id="queueBadge">모집 #0</span>
+        <span class="summary-item" id="expiryBadge">유효시간 확인 중</span>
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <section class="empty-state" id="emptyState" aria-live="polite">
+        <div class="empty-code" id="emptyCode">NO SESSION</div>
+        <h2 id="emptyTitle">Discord에서 팀 짜기 버튼을 눌러 주세요</h2>
+        <p id="emptyDescription">
+          이 페이지는 봇이 만든 전용 링크로 열 때 참가자와 Riot 티어를 불러옵니다.
+          API 키와 Discord 토큰은 링크나 브라우저로 전달되지 않습니다.
+        </p>
+      </section>
+
+      <section class="workspace" id="workspace" hidden>
+        <section class="command-bar" aria-label="팀 편성 도구">
+          <div class="command-copy">
+            <p class="eyebrow">LIVE DRAFT</p>
+            <h2><span id="playerCount">0</span>명 팀 편성</h2>
+            <p id="lookupSummary">티어 정보를 불러왔습니다.</p>
+          </div>
+          <div class="command-actions">
+            <button class="button button-primary" id="balanceButton" type="button">
+              티어 균형 배치
+            </button>
+            <button class="button" id="randomButton" type="button">랜덤 배치</button>
+            <button class="button" id="resetButton" type="button">대기열로 초기화</button>
+            <button class="button button-copy" id="copyButton" type="button">
+              Discord 결과 복사
+            </button>
+          </div>
+        </section>
+
+        <div class="draft-layout">
+          <aside class="queue-panel panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">PLAYER POOL</p>
+                <h2>대기열</h2>
+              </div>
+              <span class="count-badge" id="poolCount">0</span>
+            </div>
+            <p class="panel-help">
+              이름표를 팀 칸 가까이 끌면 자석처럼 붙습니다. 팀 간 이동도 가능합니다.
+            </p>
+            <div
+              class="drop-zone player-pool"
+              id="playerPool"
+              data-zone-id="pool"
+              data-unlimited="true"
+              aria-label="배정되지 않은 참가자"
+            ></div>
+          </aside>
+
+          <section class="games-column" id="gamesColumn" aria-label="경기별 팀"></section>
+        </div>
+
+        <p class="excluded-note" id="excludedNote" hidden></p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>CR CLAN · 비공식 내전 운영 도구</span>
+      <span>세션 데이터는 URL 조각에만 있으며 서버로 전송되지 않습니다.</span>
+    </footer>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <template id="gameTemplate">
+      <article class="game-board panel">
+        <div class="game-heading">
+          <div>
+            <p class="eyebrow">MATCH</p>
+            <h2 class="game-title">1경기</h2>
+          </div>
+          <span class="game-status">0 / 10</span>
+        </div>
+        <div class="team-grid">
+          <section class="team-panel team-blue">
+            <div class="team-heading">
+              <div>
+                <span class="team-dot" aria-hidden="true"></span>
+                <strong>블루팀</strong>
+              </div>
+              <span class="team-score">전력 —</span>
+            </div>
+            <div class="drop-zone team-drop" data-side="blue"></div>
+          </section>
+          <section class="team-panel team-red">
+            <div class="team-heading">
+              <div>
+                <span class="team-dot" aria-hidden="true"></span>
+                <strong>레드팀</strong>
+              </div>
+              <span class="team-score">전력 —</span>
+            </div>
+            <div class="drop-zone team-drop" data-side="red"></div>
+          </section>
+        </div>
+      </article>
+    </template>
+
+    <template id="playerTemplate">
+      <article class="player-card" tabindex="0">
+        <span class="drag-handle" aria-hidden="true">⠿</span>
+        <span class="queue-position"></span>
+        <div class="player-identity">
+          <strong class="display-name"></strong>
+          <span class="riot-id"></span>
+        </div>
+        <span class="rank-badge"></span>
+      </article>
+    </template>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

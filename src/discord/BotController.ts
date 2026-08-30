@@ -2,7 +2,6 @@ import {
   ChannelType,
   Client,
   Events,
-  escapeMarkdown,
   GatewayIntentBits,
   MessageFlags,
   PermissionFlagsBits,
@@ -34,7 +33,7 @@ import {
   ReservationTimeError,
 } from "../services/reservationTime.js";
 import { parseRiotId } from "../services/riotId.js";
-import { createTeamGames, type TeamGame } from "../services/teamFormation.js";
+import type { TeamBuilderService } from "../services/teamBuilder.js";
 import {
   buildImmediateRecruitmentModal,
   buildJoinModal,
@@ -85,6 +84,7 @@ export class BotController {
   constructor(
     private readonly repository: RecruitmentRepository,
     private readonly config: AppConfig,
+    private readonly teamBuilderService: TeamBuilderService,
   ) {
     this.client = new Client({
       intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
@@ -467,22 +467,26 @@ export class BotController {
     }
 
     const members = this.repository.listQueueMembers(recruitment.id);
-    const games = createTeamGames(
-      members,
-      this.config.callSize,
-      this.config.callSize * 2,
-    );
-    if (games.length === 0) {
+    if (members.length < this.config.callSize) {
       throw new DomainError(
         `팀을 짜려면 최소 ${this.config.callSize}명이 필요해요.`,
         "NOT_ENOUGH_MEMBERS",
       );
     }
 
-    const assignedCount = games.length * this.config.callSize;
-    const excludedCount = members.length - assignedCount;
-    await interaction.reply({
-      content: formatTeamGames(games, excludedCount),
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const result = await this.teamBuilderService.createLink(recruitment, members);
+    const excludedMessage =
+      result.excludedCount > 0
+        ? ` · 후순위 제외 ${result.excludedCount}명`
+        : "";
+    await interaction.editReply({
+      content: [
+        "⚔️ **웹 팀 편성판을 준비했어요.**",
+        `[드래그 팀 편성판 열기](${result.url})`,
+        `선착순 ${result.selectedCount}명${excludedMessage} · 랭크 ${result.rankedCount}명 · 언랭 ${result.unrankedCount}명 · 미조회 ${result.unavailableCount}명`,
+        `링크는 <t:${Math.floor(result.expiresAt / 1_000)}:R> 만료돼요. 편성이 끝나면 **Discord 결과 복사**를 눌러 채널에 붙여넣어 주세요.`,
+      ].join("\n"),
       allowedMentions: { parse: [] },
     });
   }
@@ -776,31 +780,4 @@ export class BotController {
       console.error("오류 응답 전송 실패", responseError);
     }
   }
-}
-
-function formatTeamGames(games: TeamGame[], excludedCount: number): string {
-  const lines = ["# ⚔️ 내전 팀 편성 결과"];
-  for (const game of games) {
-    lines.push(
-      "",
-      `## ${game.gameNumber}경기`,
-      "**🔵 블루팀**",
-      ...game.blue.map((member, index) => formatTeamMember(member, index)),
-      "**🔴 레드팀**",
-      ...game.red.map((member, index) => formatTeamMember(member, index)),
-    );
-  }
-  if (excludedCount > 0) {
-    lines.push("", `-# 후순위 ${excludedCount}명은 이번 팀 편성에서 제외됐어요.`);
-  }
-  return lines.join("\n");
-}
-
-function formatTeamMember(
-  member: TeamGame["blue"][number],
-  index: number,
-): string {
-  const name = escapeMarkdown((member.riotName ?? member.displayName).slice(0, 20));
-  const tag = member.riotTag ? ` #${escapeMarkdown(member.riotTag.slice(0, 8))}` : "";
-  return `${index + 1}. ${name}${tag} (<@${member.userId}>)`;
 }
