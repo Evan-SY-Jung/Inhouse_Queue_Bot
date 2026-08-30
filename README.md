@@ -139,7 +139,7 @@ npm run dev
 - `src/services/queuePresentation.ts` — 참가 순번과 멘션·소환 선착순 대상 계산
 - `src/services/riotId.ts` — 모집별 라이엇 닉네임·태그 검증
 - `src/services/riotApi.ts` — Account/Summoner/League API 티어 조회, 속도 제한, 메모리 캐시
-- `src/services/teamBuilder.ts` — 정멤 Riot ID 해석과 압축·만료형 팀 편성 세션 링크 생성
+- `src/services/teamBuilder.ts` — 정멤 Riot ID 해석과 Discord 프로필·티어가 포함된 압축형 팀 편성 링크 생성
 - `src/services/teamFormation.ts` — 선착순 10/20명의 무작위 5:5 팀 편성
 - `src/db/sqliteSchema.ts` — SQLite 스키마와 마이그레이션
 - `src/db/sqliteRepository.ts` — DB 읽기·쓰기와 트랜잭션
@@ -228,7 +228,7 @@ npm run dev
 3. **Actions** 탭의 `Deploy team builder to GitHub Pages` 실행이 성공했는지 확인합니다.
 4. 공개 주소 `https://evan-sy-jung.github.io/Inhouse_Queue_Bot/`가 열리는지 확인합니다.
 
-다른 주소를 사용하면 봇 서버의 `TEAM_BUILDER_BASE_URL`도 같은 주소로 바꿔야 합니다. 웹페이지는 Riot API를 직접 호출하지 않습니다. 봇 프로세스만 API 키를 보유하고 티어까지 조회한 뒤, 최대 20명의 표시용 데이터만 브라우저에서 해제하는 URL 조각(`#s=...`)으로 전달합니다. 링크를 받은 사람은 그 참가자 정보를 볼 수 있으므로 공개 채널에 링크 자체를 다시 올리지 않는 것이 좋습니다.
+다른 주소를 사용하면 봇 서버의 `TEAM_BUILDER_BASE_URL`도 같은 주소로 바꿔야 합니다. 웹페이지는 Riot API나 Discord API를 직접 호출하지 않습니다. 봇 프로세스가 티어와 Discord 프로필 식별 정보를 준비한 뒤, 최대 20명의 표시용 데이터만 브라우저에서 해제하는 URL 조각(`#s=...`)으로 전달합니다. 프로필 이미지는 브라우저가 Discord CDN에서 불러오며 토큰과 API 키는 링크에 포함되지 않습니다. 링크를 받은 사람은 참가자 정보를 볼 수 있으므로 공개 채널에 링크 자체를 다시 올리지 않는 것이 좋습니다.
 
 ## Docker 실행
 

@@ -1,4 +1,5 @@
-const SESSION_VERSION = 1;
+const SESSION_VERSION = 2;
+const LEGACY_SESSION_VERSION = 1;
 const SNAP_DISTANCE = 150;
 const TIER_ORDER = [
   "IRON",
@@ -20,17 +21,12 @@ const elements = {
   emptyTitle: document.querySelector("#emptyTitle"),
   emptyDescription: document.querySelector("#emptyDescription"),
   workspace: document.querySelector("#workspace"),
-  sessionSummary: document.querySelector("#sessionSummary"),
-  gameBadge: document.querySelector("#gameBadge"),
-  queueBadge: document.querySelector("#queueBadge"),
-  expiryBadge: document.querySelector("#expiryBadge"),
-  playerCount: document.querySelector("#playerCount"),
-  lookupSummary: document.querySelector("#lookupSummary"),
+  commandActions: document.querySelector("#commandActions"),
   playerPool: document.querySelector("#playerPool"),
   poolCount: document.querySelector("#poolCount"),
-  gamesColumn: document.querySelector("#gamesColumn"),
+  teamsGrid: document.querySelector("#teamsGrid"),
   excludedNote: document.querySelector("#excludedNote"),
-  gameTemplate: document.querySelector("#gameTemplate"),
+  teamTemplate: document.querySelector("#teamTemplate"),
   playerTemplate: document.querySelector("#playerTemplate"),
   balanceButton: document.querySelector("#balanceButton"),
   randomButton: document.querySelector("#randomButton"),
@@ -75,10 +71,7 @@ try {
 function initializeWorkspace(value) {
   elements.emptyState.hidden = true;
   elements.workspace.hidden = false;
-  elements.sessionSummary.hidden = false;
-  elements.gameBadge.textContent = value.gameType === "RIFT" ? "협곡" : "아람";
-  elements.queueBadge.textContent = `모집 #${value.recruitmentId}`;
-  elements.playerCount.textContent = String(value.players.length);
+  elements.commandActions.hidden = false;
 
   players = value.players.map((player, index) => ({
     ...player,
@@ -87,15 +80,8 @@ function initializeWorkspace(value) {
     score: rankScore(player),
   }));
 
-  buildGameBoards(value);
+  buildTeamBoards(value);
   buildPlayerCards();
-  updateExpiry();
-  setInterval(updateExpiry, 30_000);
-
-  const ranked = players.filter((player) => player.status === "RANKED").length;
-  const unranked = players.filter((player) => player.status === "UNRANKED").length;
-  const unavailable = players.length - ranked - unranked;
-  elements.lookupSummary.textContent = `랭크 ${ranked}명 · 언랭 ${unranked}명 · 미조회 ${unavailable}명`;
 
   if (value.excludedCount > 0) {
     elements.excludedNote.hidden = false;
@@ -111,26 +97,26 @@ function initializeWorkspace(value) {
   updateBoard();
 }
 
-function buildGameBoards(value) {
+function buildTeamBoards(value) {
   const gameSize = value.teamSize * 2;
-  const gameCount = Math.ceil(value.players.length / gameSize);
-  for (let gameIndex = 0; gameIndex < gameCount; gameIndex += 1) {
-    const board = elements.gameTemplate.content.firstElementChild.cloneNode(true);
-    board.dataset.game = String(gameIndex + 1);
-    board.querySelector(".game-title").textContent = `${gameIndex + 1}경기`;
+  const teamCount = Math.ceil(value.players.length / gameSize) * 2;
+  for (let teamIndex = 0; teamIndex < teamCount; teamIndex += 1) {
+    const teamNumber = teamIndex + 1;
+    const panel = elements.teamTemplate.content.firstElementChild.cloneNode(true);
+    const gameNumber = Math.floor(teamIndex / 2) + 1;
+    const side = teamIndex % 2 === 0 ? "blue" : "red";
+    const zoneId = `g${gameNumber}-${side}`;
+    const zone = panel.querySelector(".team-drop");
 
-    for (const side of ["blue", "red"]) {
-      const zone = board.querySelector(`[data-side="${side}"]`);
-      const zoneId = `g${gameIndex + 1}-${side}`;
-      zone.dataset.zoneId = zoneId;
-      zone.dataset.max = String(value.teamSize);
-      zone.setAttribute(
-        "aria-label",
-        `${gameIndex + 1}경기 ${side === "blue" ? "블루" : "레드"}팀`,
-      );
-      zones.set(zoneId, zone);
-    }
-    elements.gamesColumn.append(board);
+    panel.dataset.team = String(teamNumber);
+    panel.querySelector(".team-number").textContent = String(teamNumber);
+    panel.querySelector(".team-title").textContent = `${teamNumber}번 팀`;
+    zone.dataset.zoneId = zoneId;
+    zone.dataset.max = String(value.teamSize);
+    zone.dataset.side = side;
+    zone.setAttribute("aria-label", `${teamNumber}번 팀`);
+    zones.set(zoneId, zone);
+    elements.teamsGrid.append(panel);
   }
   zones.set("pool", elements.playerPool);
 }
@@ -139,9 +125,17 @@ function buildPlayerCards() {
   for (const player of players) {
     const card = elements.playerTemplate.content.firstElementChild.cloneNode(true);
     card.dataset.playerId = player.id;
-    card.querySelector(".queue-position").textContent = String(player.position).padStart(2, "0");
     card.querySelector(".display-name").textContent = player.displayName;
     card.querySelector(".riot-id").textContent = `${player.riotName} #${player.riotTag}`;
+
+    const avatar = card.querySelector(".discord-avatar");
+    const avatarFallback = card.querySelector(".avatar-fallback");
+    avatarFallback.textContent = avatarInitial(player.displayName);
+    const avatarSource = discordAvatarUrl(player);
+    if (avatarSource) {
+      avatar.src = avatarSource;
+      avatar.addEventListener("error", () => avatar.removeAttribute("src"), { once: true });
+    }
 
     const badge = card.querySelector(".rank-badge");
     badge.textContent = formatRank(player);
@@ -387,24 +381,30 @@ function updateBoard() {
     elements.playerPool.querySelectorAll(":scope > .player-card").length,
   );
 
-  for (const board of elements.gamesColumn.querySelectorAll(".game-board")) {
-    const blueZone = board.querySelector('[data-side="blue"]');
-    const redZone = board.querySelector('[data-side="red"]');
-    const blueCards = [...blueZone.querySelectorAll(":scope > .player-card")];
-    const redCards = [...redZone.querySelectorAll(":scope > .player-card")];
-    board.querySelector(".game-status").textContent =
-      `${blueCards.length + redCards.length} / ${session.teamSize * 2}`;
-    board.querySelector(".team-blue .team-score").textContent = teamScoreLabel(blueCards);
-    board.querySelector(".team-red .team-score").textContent = teamScoreLabel(redCards);
+  for (const panel of elements.teamsGrid.querySelectorAll(".team-panel")) {
+    const count = panel.querySelectorAll(".team-drop > .player-card").length;
+    panel.querySelector(".team-count").textContent = `${count} / ${session.teamSize}`;
   }
 }
 
-function teamScoreLabel(teamCards) {
-  const scores = teamCards
-    .map((card) => playerById(card.dataset.playerId).score)
-    .filter((score) => score !== null);
-  if (!scores.length) return "전력 —";
-  return `전력 ${Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)}`;
+function avatarInitial(displayName) {
+  return [...displayName.trim()][0]?.toLocaleUpperCase("ko-KR") ?? "?";
+}
+
+function discordAvatarUrl(player) {
+  if (!player.userId || !player.avatarRef) return null;
+  const kind = player.avatarRef[0];
+  const value = player.avatarRef.slice(1);
+  if (kind === "d") {
+    return `https://cdn.discordapp.com/embed/avatars/${value}.png`;
+  }
+  if (kind === "u") {
+    return `https://cdn.discordapp.com/avatars/${player.userId}/${value}.webp?size=128`;
+  }
+  if (kind === "g" && session.guildId) {
+    return `https://cdn.discordapp.com/guilds/${session.guildId}/users/${player.userId}/avatars/${value}.webp?size=128`;
+  }
+  return null;
 }
 
 function rankScore(player) {
@@ -437,24 +437,18 @@ function rankTitle(player) {
 
 async function copyDiscordResult() {
   const lines = ["# ⚔️ CR 내전 팀 편성 결과"];
-  for (const board of elements.gamesColumn.querySelectorAll(".game-board")) {
-    const gameNumber = board.dataset.game;
-    lines.push("", `## ${gameNumber}경기`);
-    for (const [side, label] of [
-      ["blue", "🔵 블루팀"],
-      ["red", "🔴 레드팀"],
-    ]) {
-      lines.push(`**${label}**`);
-      const teamCards = [...board.querySelectorAll(`[data-side="${side}"] > .player-card`)];
-      teamCards.forEach((card, index) => {
-        const player = playerById(card.dataset.playerId);
-        lines.push(
-          `${index + 1}. ${escapeDiscord(player.displayName)} · ${escapeDiscord(player.riotName)} #${escapeDiscord(player.riotTag)} · ${formatRank(player)}`,
-        );
-      });
-      const emptySlots = session.teamSize - teamCards.length;
-      if (emptySlots > 0) lines.push(`-# 빈자리 ${emptySlots}명`);
-    }
+  for (const panel of elements.teamsGrid.querySelectorAll(".team-panel")) {
+    const teamNumber = panel.dataset.team;
+    lines.push("", `## ${teamNumber}번 팀`);
+    const teamCards = [...panel.querySelectorAll(".team-drop > .player-card")];
+    teamCards.forEach((card, index) => {
+      const player = playerById(card.dataset.playerId);
+      lines.push(
+        `${index + 1}. ${escapeDiscord(player.displayName)} · ${escapeDiscord(player.riotName)} #${escapeDiscord(player.riotTag)} · ${formatRank(player)}`,
+      );
+    });
+    const emptySlots = session.teamSize - teamCards.length;
+    if (emptySlots > 0) lines.push(`-# 빈자리 ${emptySlots}명`);
   }
   const poolCards = [...elements.playerPool.querySelectorAll(":scope > .player-card")];
   if (poolCards.length > 0) {
@@ -529,18 +523,6 @@ function storageKey() {
   return `cr-team-layout:${session.recruitmentId}:${session.generatedAt}`;
 }
 
-function updateExpiry() {
-  const seconds = Math.max(0, session.expiresAt - Math.floor(Date.now() / 1_000));
-  if (seconds <= 0) {
-    elements.expiryBadge.textContent = "링크 만료";
-    return;
-  }
-  const minutes = Math.ceil(seconds / 60);
-  elements.expiryBadge.textContent = minutes >= 60
-    ? `${Math.floor(minutes / 60)}시간 ${minutes % 60}분 남음`
-    : `${minutes}분 남음`;
-}
-
 function showToast(message) {
   elements.toast.textContent = message;
   elements.toast.classList.add("visible");
@@ -550,7 +532,7 @@ function showToast(message) {
 
 function showEmpty(code, title, description) {
   elements.workspace.hidden = true;
-  elements.sessionSummary.hidden = true;
+  elements.commandActions.hidden = true;
   elements.emptyState.hidden = false;
   elements.emptyCode.textContent = code;
   elements.emptyTitle.textContent = title;
@@ -591,13 +573,42 @@ function base64UrlToBytes(value) {
 }
 
 function parseSession(value) {
-  if (!Array.isArray(value) || value.length !== 8 || value[0] !== SESSION_VERSION) {
+  if (!Array.isArray(value)) {
     throw new Error("지원하지 않는 팀 편성 세션입니다.");
   }
-  const [, recruitmentId, gameCode, generatedAt, expiresAt, teamSize, excludedCount, rows] = value;
+  const version = value[0];
+  let recruitmentId;
+  let gameCode;
+  let guildId;
+  let generatedAt;
+  let expiresAt;
+  let teamSize;
+  let excludedCount;
+  let rows;
+
+  if (version === SESSION_VERSION && value.length === 9) {
+    [
+      ,
+      recruitmentId,
+      gameCode,
+      guildId,
+      generatedAt,
+      expiresAt,
+      teamSize,
+      excludedCount,
+      rows,
+    ] = value;
+  } else if (version === LEGACY_SESSION_VERSION && value.length === 8) {
+    [, recruitmentId, gameCode, generatedAt, expiresAt, teamSize, excludedCount, rows] = value;
+    guildId = "";
+  } else {
+    throw new Error("지원하지 않는 팀 편성 세션입니다.");
+  }
+
   if (
     !Number.isInteger(recruitmentId) ||
     !["R", "A"].includes(gameCode) ||
+    (version === SESSION_VERSION && !/^\d{17,20}$/.test(guildId)) ||
     !Number.isInteger(generatedAt) ||
     !Number.isInteger(expiresAt) ||
     !Number.isInteger(teamSize) ||
@@ -611,22 +622,35 @@ function parseSession(value) {
     throw new Error("팀 편성 세션 값이 올바르지 않습니다.");
   }
   return {
-    version: SESSION_VERSION,
+    version,
     recruitmentId,
     gameType: gameCode === "R" ? "RIFT" : "ARAM",
+    guildId,
     generatedAt,
     expiresAt,
     teamSize,
     excludedCount,
-    players: rows.map(parsePlayer),
+    players: rows.map((row) => parsePlayer(row, version)),
   };
 }
 
-function parsePlayer(row) {
-  if (!Array.isArray(row) || row.length !== 8) {
+function parsePlayer(row, version) {
+  const expectedLength = version === SESSION_VERSION ? 10 : 8;
+  if (!Array.isArray(row) || row.length !== expectedLength) {
     throw new Error("참가자 데이터가 올바르지 않습니다.");
   }
-  const [displayName, compactRiotName, riotTag, statusCode, queueCode, tier, division, points] = row;
+  const [
+    displayName,
+    compactRiotName,
+    riotTag,
+    statusCode,
+    queueCode,
+    tier,
+    division,
+    points,
+    userId = "",
+    avatarRef = "",
+  ] = row;
   if (
     typeof displayName !== "string" ||
     displayName.length > 40 ||
@@ -638,7 +662,10 @@ function parsePlayer(row) {
     !["S", "F", ""].includes(queueCode) ||
     typeof tier !== "string" ||
     typeof division !== "string" ||
-    !Number.isFinite(points)
+    !Number.isFinite(points) ||
+    (version === SESSION_VERSION && !/^\d{17,20}$/.test(userId)) ||
+    (version === SESSION_VERSION &&
+      !(/^[gu](?:a_)?[a-f0-9]{32}$/.test(avatarRef) || /^d[0-5]$/.test(avatarRef)))
   ) {
     throw new Error("참가자 값이 올바르지 않습니다.");
   }
@@ -646,6 +673,8 @@ function parsePlayer(row) {
     displayName,
     riotName: compactRiotName || displayName,
     riotTag,
+    userId,
+    avatarRef,
     status: { R: "RANKED", U: "UNRANKED", N: "NOT_FOUND", K: "API_UNAVAILABLE", E: "API_ERROR" }[
       statusCode
     ],
