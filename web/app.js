@@ -1,19 +1,6 @@
 const SESSION_VERSION = 2;
 const LEGACY_SESSION_VERSION = 1;
 const SNAP_DISTANCE = 150;
-const TIER_ORDER = [
-  "IRON",
-  "BRONZE",
-  "SILVER",
-  "GOLD",
-  "PLATINUM",
-  "EMERALD",
-  "DIAMOND",
-  "MASTER",
-  "GRANDMASTER",
-  "CHALLENGER",
-];
-const DIVISION_SCORE = { IV: 0, III: 100, II: 200, I: 300 };
 
 const elements = {
   emptyState: document.querySelector("#emptyState"),
@@ -21,17 +8,12 @@ const elements = {
   emptyTitle: document.querySelector("#emptyTitle"),
   emptyDescription: document.querySelector("#emptyDescription"),
   workspace: document.querySelector("#workspace"),
-  commandActions: document.querySelector("#commandActions"),
   playerPool: document.querySelector("#playerPool"),
   poolCount: document.querySelector("#poolCount"),
   teamsGrid: document.querySelector("#teamsGrid"),
   excludedNote: document.querySelector("#excludedNote"),
   teamTemplate: document.querySelector("#teamTemplate"),
   playerTemplate: document.querySelector("#playerTemplate"),
-  balanceButton: document.querySelector("#balanceButton"),
-  randomButton: document.querySelector("#randomButton"),
-  resetButton: document.querySelector("#resetButton"),
-  copyButton: document.querySelector("#copyButton"),
   toast: document.querySelector("#toast"),
 };
 
@@ -71,13 +53,11 @@ try {
 function initializeWorkspace(value) {
   elements.emptyState.hidden = true;
   elements.workspace.hidden = false;
-  elements.commandActions.hidden = false;
 
   players = value.players.map((player, index) => ({
     ...player,
     id: `p${index + 1}`,
     position: index + 1,
-    score: rankScore(player),
   }));
 
   buildTeamBoards(value);
@@ -88,19 +68,12 @@ function initializeWorkspace(value) {
     elements.excludedNote.textContent = `선착순 기준 뒤의 ${value.excludedCount}명은 이번 편성 링크에서 제외됐습니다.`;
   }
 
-  elements.balanceButton.addEventListener("click", autoBalance);
-  elements.randomButton.addEventListener("click", randomizeTeams);
-  elements.resetButton.addEventListener("click", resetToPool);
-  elements.copyButton.addEventListener("click", copyDiscordResult);
-
-  if (!restoreLayout()) autoBalance(false);
+  restoreLayout();
   updateBoard();
 }
 
 function buildTeamBoards(value) {
-  const gameSize = value.teamSize * 2;
-  const teamCount = Math.ceil(value.players.length / gameSize) * 2;
-  for (let teamIndex = 0; teamIndex < teamCount; teamIndex += 1) {
+  for (let teamIndex = 0; teamIndex < 4; teamIndex += 1) {
     const teamNumber = teamIndex + 1;
     const panel = elements.teamTemplate.content.firstElementChild.cloneNode(true);
     const gameNumber = Math.floor(teamIndex / 2) + 1;
@@ -150,83 +123,6 @@ function buildPlayerCards() {
     cards.set(player.id, card);
     elements.playerPool.append(card);
   }
-}
-
-function autoBalance(showMessage = true) {
-  moveAllToPool();
-  const gameSize = session.teamSize * 2;
-  const knownScores = players
-    .map((player) => player.score)
-    .filter((score) => score !== null)
-    .sort((left, right) => left - right);
-  const fallbackScore = knownScores.length
-    ? knownScores[Math.floor(knownScores.length / 2)]
-    : 0;
-
-  const gameCount = Math.ceil(players.length / gameSize);
-  for (let gameIndex = 0; gameIndex < gameCount; gameIndex += 1) {
-    const group = players
-      .slice(gameIndex * gameSize, (gameIndex + 1) * gameSize)
-      .sort(
-        (left, right) =>
-          (right.score ?? fallbackScore) - (left.score ?? fallbackScore),
-      );
-    const blue = [];
-    const red = [];
-    let blueScore = 0;
-    let redScore = 0;
-    const blueTarget = Math.ceil(group.length / 2);
-    const redTarget = Math.floor(group.length / 2);
-    for (const player of group) {
-      const score = player.score ?? fallbackScore;
-      if (
-        blue.length < blueTarget &&
-        (red.length >= redTarget || blueScore <= redScore)
-      ) {
-        blue.push(player);
-        blueScore += score;
-      } else {
-        red.push(player);
-        redScore += score;
-      }
-    }
-    appendPlayers(`g${gameIndex + 1}-blue`, blue);
-    appendPlayers(`g${gameIndex + 1}-red`, red);
-  }
-  updateBoard();
-  saveLayout();
-  if (showMessage) showToast("티어 점수를 기준으로 팀 균형을 맞췄습니다.");
-}
-
-function randomizeTeams() {
-  moveAllToPool();
-  const gameSize = session.teamSize * 2;
-  const gameCount = Math.ceil(players.length / gameSize);
-  for (let gameIndex = 0; gameIndex < gameCount; gameIndex += 1) {
-    const group = shuffle(players.slice(gameIndex * gameSize, (gameIndex + 1) * gameSize));
-    const blueCount = Math.ceil(group.length / 2);
-    appendPlayers(`g${gameIndex + 1}-blue`, group.slice(0, blueCount));
-    appendPlayers(`g${gameIndex + 1}-red`, group.slice(blueCount));
-  }
-  updateBoard();
-  saveLayout();
-  showToast("선착순 경기 단위로 팀을 무작위 배치했습니다.");
-}
-
-function resetToPool() {
-  moveAllToPool();
-  updateBoard();
-  saveLayout();
-  showToast("모든 이름표를 대기열로 되돌렸습니다.");
-}
-
-function appendPlayers(zoneId, values) {
-  const zone = zones.get(zoneId);
-  for (const player of values) zone.append(cards.get(player.id));
-}
-
-function moveAllToPool() {
-  for (const player of players) elements.playerPool.append(cards.get(player.id));
 }
 
 function startDrag(event) {
@@ -407,17 +303,6 @@ function discordAvatarUrl(player) {
   return null;
 }
 
-function rankScore(player) {
-  if (player.status !== "RANKED" || !player.tier) return null;
-  const tierIndex = TIER_ORDER.indexOf(player.tier);
-  if (tierIndex < 0) return null;
-  return (
-    tierIndex * 400 +
-    (DIVISION_SCORE[player.division] ?? 300) +
-    (player.leaguePoints ?? 0)
-  );
-}
-
 function formatRank(player) {
   if (player.status === "RANKED") {
     const division = player.division ? ` ${player.division}` : "";
@@ -433,54 +318,6 @@ function formatRank(player) {
 function rankTitle(player) {
   if (player.status !== "RANKED") return formatRank(player);
   return `${player.queue === "SOLO" ? "솔로 랭크" : "자유 랭크"} · ${formatRank(player)}`;
-}
-
-async function copyDiscordResult() {
-  const lines = ["# ⚔️ CR 내전 팀 편성 결과"];
-  for (const panel of elements.teamsGrid.querySelectorAll(".team-panel")) {
-    const teamNumber = panel.dataset.team;
-    lines.push("", `## ${teamNumber}번 팀`);
-    const teamCards = [...panel.querySelectorAll(".team-drop > .player-card")];
-    teamCards.forEach((card, index) => {
-      const player = playerById(card.dataset.playerId);
-      lines.push(
-        `${index + 1}. ${escapeDiscord(player.displayName)} · ${escapeDiscord(player.riotName)} #${escapeDiscord(player.riotTag)} · ${formatRank(player)}`,
-      );
-    });
-    const emptySlots = session.teamSize - teamCards.length;
-    if (emptySlots > 0) lines.push(`-# 빈자리 ${emptySlots}명`);
-  }
-  const poolCards = [...elements.playerPool.querySelectorAll(":scope > .player-card")];
-  if (poolCards.length > 0) {
-    lines.push("", "## 미배정 대기열");
-    poolCards.forEach((card, index) => {
-      const player = playerById(card.dataset.playerId);
-      lines.push(
-        `${index + 1}. ${escapeDiscord(player.displayName)} · ${escapeDiscord(player.riotName)} #${escapeDiscord(player.riotTag)} · ${formatRank(player)}`,
-      );
-    });
-  }
-  if (session.excludedCount > 0) {
-    lines.push("", `-# 후순위 ${session.excludedCount}명은 이번 편성에서 제외`);
-  }
-
-  try {
-    await navigator.clipboard.writeText(lines.join("\n"));
-  } catch {
-    const textarea = document.createElement("textarea");
-    textarea.value = lines.join("\n");
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    document.body.append(textarea);
-    textarea.select();
-    document.execCommand("copy");
-    textarea.remove();
-  }
-  showToast("Discord용 팀 편성 결과를 복사했습니다.");
-}
-
-function escapeDiscord(value) {
-  return value.replace(/([\\*_~`>|])/g, "\\$1").replaceAll("@", "@\u200b");
 }
 
 function saveLayout() {
@@ -532,7 +369,6 @@ function showToast(message) {
 
 function showEmpty(code, title, description) {
   elements.workspace.hidden = true;
-  elements.commandActions.hidden = true;
   elements.emptyState.hidden = false;
   elements.emptyCode.textContent = code;
   elements.emptyTitle.textContent = title;
@@ -543,14 +379,6 @@ function playerById(id) {
   const player = players.find((candidate) => candidate.id === id);
   if (!player) throw new Error("참가자 정보를 찾을 수 없습니다.");
   return player;
-}
-
-function shuffle(values) {
-  for (let index = values.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [values[index], values[swapIndex]] = [values[swapIndex], values[index]];
-  }
-  return values;
 }
 
 async function readSession() {

@@ -56,6 +56,18 @@ describe("team builder session", () => {
         "클로버",
       ),
     ).toEqual({ name: "DisplayName", tag: "NA1" });
+    expect(
+      resolveQueueMemberRiotId(
+        { displayName: "♣ Jindog 광진 00", riotName: null, riotTag: null },
+        "클로버",
+      ),
+    ).toEqual({ name: "Jindog", tag: "클로버" });
+    expect(
+      resolveQueueMemberRiotId(
+        { displayName: "◆ AdminCarry 민수 27", riotName: null, riotTag: null },
+        "클로버",
+      ),
+    ).toEqual({ name: "AdminCarry", tag: "클로버" });
   });
 
   it("encodes partial games into an expiring URL fragment", async () => {
@@ -77,7 +89,7 @@ describe("team builder session", () => {
     const session = decodeTeamBuilderSession(url.hash.slice("#s=".length));
 
     expect(url.origin + url.pathname).toBe("https://example.github.io/Inhouse_Queue_Bot/");
-    expect(url.searchParams.get("v")).toBe("2");
+    expect(url.searchParams.get("v")).toBe("3");
     expect(result).toMatchObject({
       selectedCount: 13,
       excludedCount: 0,

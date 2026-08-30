@@ -14,27 +14,11 @@
       content="CR Discord 내전 참가자를 드래그해 팀을 편성하는 보드"
     />
     <title>CR 내전 팀 편성판</title>
-    <link rel="stylesheet" href="./styles.css?v=2" />
+    <link rel="stylesheet" href="./styles.css?v=3" />
   </head>
   <body>
     <header class="topbar">
-      <div class="brand-block">
-        <div class="brand-mark" aria-hidden="true">CR</div>
-        <div>
-          <p class="eyebrow">INHOUSE CONTROL ROOM</p>
-          <h1>팀 밸런스 보드</h1>
-        </div>
-      </div>
-      <div class="command-actions" id="commandActions" hidden aria-label="팀 편성 도구">
-        <button class="button button-primary" id="balanceButton" type="button">
-          티어 균형 배치
-        </button>
-        <button class="button" id="randomButton" type="button">랜덤 배치</button>
-        <button class="button" id="resetButton" type="button">대기열로 초기화</button>
-        <button class="button button-copy" id="copyButton" type="button">
-          Discord 결과 복사
-        </button>
-      </div>
+      <h1>테스트</h1>
     </header>
 
     <main class="page-shell">
@@ -70,11 +54,6 @@
       </section>
     </main>
 
-    <footer class="footer">
-      <span>CR CLAN · 비공식 내전 운영 도구</span>
-      <span>세션 데이터는 URL 조각에만 있으며 서버로 전송되지 않습니다.</span>
-    </footer>
-
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <template id="teamTemplate">
@@ -104,6 +83,6 @@
       </article>
     </template>
 
-    <script type="module" src="./app.js?v=2"></script>
+    <script type="module" src="./app.js?v=3"></script>
   </body>
 </html>

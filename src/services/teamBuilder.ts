@@ -10,6 +10,7 @@ import type {
 import { parseRiotId, type RiotId } from "./riotId.js";
 
 export const TEAM_BUILDER_SESSION_VERSION = 2;
+const TEAM_BUILDER_WEB_VERSION = 3;
 const DEFAULT_MAX_URL_LENGTH = 1_700;
 
 type RankStatusCode = "R" | "U" | "N" | "K" | "E";
@@ -144,7 +145,7 @@ export class TeamBuilderService {
     };
     const encoded = encodeTeamBuilderSession(session);
     const url = new URL(this.options.baseUrl);
-    url.searchParams.set("v", String(TEAM_BUILDER_SESSION_VERSION));
+    url.searchParams.set("v", String(TEAM_BUILDER_WEB_VERSION));
     url.hash = `s=${encoded}`;
     const href = url.toString();
     if (href.length > this.maxUrlLength) {
@@ -176,7 +177,15 @@ export function resolveQueueMemberRiotId(
   const submittedTag = member.riotTag?.trim();
   if (submittedName && submittedTag) return parseRiotId(submittedName, submittedTag);
 
-  const name = (submittedName || member.displayName.trim()).slice(0, 32);
+  const formattedMemberName =
+    !submittedName && !submittedTag
+      ? extractMemberRiotName(member.displayName)
+      : null;
+  const name = (
+    submittedName ||
+    formattedMemberName ||
+    member.displayName.trim()
+  ).slice(0, 32);
   if (!submittedTag) {
     const hashIndex = name.lastIndexOf("#");
     if (hashIndex > 0 && hashIndex < name.length - 1) {
@@ -188,6 +197,23 @@ export function resolveQueueMemberRiotId(
     }
   }
   return parseRiotId(name, submittedTag || fixedMemberTag);
+}
+
+function extractMemberRiotName(displayName: string): string | null {
+  const parts = displayName.trim().split(/\s+/u);
+  if (parts.length !== 4) return null;
+
+  const [roleMark, riotName, realName, memberNumber] = parts;
+  if (
+    !roleMark ||
+    !/^[^\p{L}\p{N}]+$/u.test(roleMark) ||
+    !riotName ||
+    !realName ||
+    !/^\d{2}$/.test(memberNumber ?? "")
+  ) {
+    return null;
+  }
+  return riotName;
 }
 
 export function encodeTeamBuilderSession(session: TeamBuilderSession): string {

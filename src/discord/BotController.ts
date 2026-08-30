@@ -498,7 +498,7 @@ export class BotController {
         "⚔️ **웹 팀 편성판을 준비했어요.**",
         `[드래그 팀 편성판 열기](${result.url})`,
         `선착순 ${result.selectedCount}명${excludedMessage} · 랭크 ${result.rankedCount}명 · 언랭 ${result.unrankedCount}명 · 미조회 ${result.unavailableCount}명`,
-        `링크는 <t:${Math.floor(result.expiresAt / 1_000)}:R> 만료돼요. 편성이 끝나면 **Discord 결과 복사**를 눌러 채널에 붙여넣어 주세요.`,
+        `링크는 <t:${Math.floor(result.expiresAt / 1_000)}:R> 만료돼요.`,
       ].join("\n"),
       allowedMentions: { parse: [] },
     });
