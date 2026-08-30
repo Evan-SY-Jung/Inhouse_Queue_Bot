@@ -26,8 +26,10 @@ import {
 } from "../src/discord/constants.js";
 import {
   buildRecruitmentPermissionOverwrites,
+  canManageRecruitment,
   hasUnlimitedSummonPermission,
   interactionHasRole,
+  isInhouseRoleActionAllowed,
 } from "../src/discord/helpers.js";
 import {
   buildInitialRecruitmentMessagePayload,
@@ -530,6 +532,43 @@ describe("Discord views", () => {
     );
   });
 
+  it("allows only creators or either operator type to manage recruitments", () => {
+    const interaction = (
+      userId: string,
+      roleIds: string[] = [],
+      permissions: bigint = 0n,
+    ): RepliableInteraction =>
+      ({
+        user: { id: userId },
+        member: { roles: roleIds },
+        memberPermissions: new PermissionsBitField(permissions),
+      }) as unknown as RepliableInteraction;
+    const canManage = (value: RepliableInteraction) =>
+      canManageRecruitment(
+        value,
+        "creator",
+        INHOUSE_MANAGER_ROLE_ID,
+        INHOUSE_ROLE_ID,
+      );
+
+    expect(canManage(interaction("creator"))).toBe(true);
+    expect(canManage(interaction("member"))).toBe(false);
+    expect(canManage(interaction("manager", [INHOUSE_MANAGER_ROLE_ID]))).toBe(true);
+    expect(
+      canManage(interaction("admin", [], PermissionFlagsBits.Administrator)),
+    ).toBe(true);
+    expect(canManage(interaction("creator", [INHOUSE_ROLE_ID]))).toBe(false);
+    expect(
+      canManage(
+        interaction(
+          "external-operator",
+          [INHOUSE_ROLE_ID, INHOUSE_MANAGER_ROLE_ID],
+          PermissionFlagsBits.Administrator,
+        ),
+      ),
+    ).toBe(false);
+  });
+
   it("identifies only the external inhouse role for Riot ID collection", () => {
     const interaction = (roleIds: string[]): RepliableInteraction =>
       ({ member: { roles: roleIds } }) as unknown as RepliableInteraction;
@@ -538,6 +577,27 @@ describe("Discord views", () => {
     expect(interactionHasRole(interaction(["rookie-role"]), INHOUSE_ROLE_ID)).toBe(false);
     expect(interactionHasRole(interaction(["regular-role"]), INHOUSE_ROLE_ID)).toBe(false);
     expect(interactionHasRole(interaction([]), INHOUSE_ROLE_ID)).toBe(false);
+  });
+
+  it("allows the external inhouse role to join and leave only", () => {
+    expect(isInhouseRoleActionAllowed("join")).toBe(true);
+    expect(isInhouseRoleActionAllowed("join-submit")).toBe(true);
+    expect(isInhouseRoleActionAllowed("leave")).toBe(true);
+
+    for (const action of [
+      "panel-rift",
+      "panel-aram",
+      "immediate",
+      "close",
+      "teams",
+      "mention",
+      "summon",
+      "summon-confirm",
+      "delete",
+      "setup",
+    ]) {
+      expect(isInhouseRoleActionAllowed(action)).toBe(false);
+    }
   });
 
   it("switches close to reopen while locking and unlocking join controls", () => {

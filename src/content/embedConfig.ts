@@ -86,7 +86,7 @@ export const EMBED_CONFIG: EmbedConfig = {
       details: ["> ### 📖 **정보**", "{providedDescription}"],
     },
     summonFooterTexts: {
-      available: "삭제: 생성자/관리자 · 소환: 생성자/관리자/내전관리자",
+      available: "관리: 생성자/관리자/내전관리자 · 내전 역할: 신청/쫄튀만 가능",
       claimed: "올 소환 처리 중",
       used: "생성자 소환 사용 완료 · 관리자/내전관리자는 계속 사용 가능",
     },

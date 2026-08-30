@@ -28,11 +28,28 @@ export function interactionHasRole(
   return Array.isArray(roles) ? roles.includes(roleId) : roles.cache.has(roleId);
 }
 
+export function isInhouseRoleActionAllowed(action: string): boolean {
+  return action === "join" || action === "leave" || action === "join-submit";
+}
+
 export function hasUnlimitedSummonPermission(
   interaction: RepliableInteraction,
   managerRoleId: string,
 ): boolean {
   return isAdministrator(interaction) || interactionHasRole(interaction, managerRoleId);
+}
+
+export function canManageRecruitment(
+  interaction: RepliableInteraction,
+  creatorId: string,
+  managerRoleId: string,
+  restrictedRoleId: string,
+): boolean {
+  if (interactionHasRole(interaction, restrictedRoleId)) return false;
+  return (
+    interaction.user.id === creatorId ||
+    hasUnlimitedSummonPermission(interaction, managerRoleId)
+  );
 }
 
 export function asCategory(channel: GuildBasedChannel | null): CategoryChannel | null {

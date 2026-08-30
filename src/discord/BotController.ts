@@ -58,9 +58,11 @@ import {
   asCategory,
   assertBotCanCreateRecruitments,
   buildRecruitmentPermissionOverwrites,
+  canManageRecruitment,
   hasUnlimitedSummonPermission,
   interactionHasRole,
   isAdministrator,
+  isInhouseRoleActionAllowed,
   parseSnowflake,
 } from "./helpers.js";
 import {
@@ -135,6 +137,7 @@ export class BotController {
       return;
     }
     this.requireGuild(interaction);
+    this.requireInhouseRoleActionAccess(interaction);
     if (!isAdministrator(interaction)) {
       throw new DomainError("이 명령어는 관리자만 사용할 수 있어요.", "ADMIN_ONLY");
     }
@@ -144,6 +147,9 @@ export class BotController {
   private async handleButton(interaction: ButtonInteraction): Promise<void> {
     const customId = parseCustomId(interaction.customId);
     if (!customId) return;
+    if (!isInhouseRoleActionAllowed(customId.action)) {
+      this.requireInhouseRoleActionAccess(interaction);
+    }
 
     switch (customId.action) {
       case "panel-rift":
@@ -189,6 +195,9 @@ export class BotController {
   private async handleModal(interaction: ModalSubmitInteraction): Promise<void> {
     const customId = parseCustomId(interaction.customId);
     if (!customId) return;
+    if (!isInhouseRoleActionAllowed(customId.action)) {
+      this.requireInhouseRoleActionAccess(interaction);
+    }
 
     switch (customId.action) {
       case "setup":
@@ -432,7 +441,7 @@ export class BotController {
     recruitmentId: number,
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
-    this.requireCreatorOrAdministrator(interaction, recruitment, "마감/재오픈");
+    this.requireRecruitmentOperator(interaction, recruitment, "마감/재오픈");
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const updated = this.repository.toggleRegistration(recruitment.id);
     const refreshWarning = await this.stateService.tryRefreshRecruitmentMessage(recruitment.id);
@@ -448,7 +457,7 @@ export class BotController {
     recruitmentId: number,
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
-    this.requireCreatorOrAdministrator(interaction, recruitment, "팀 짜기");
+    this.requireRecruitmentOperator(interaction, recruitment, "팀 짜기");
     if (recruitment.registrationState !== "CLOSED") {
       throw new DomainError("먼저 참가 신청을 마감해 주세요.", "REGISTRATION_STILL_OPEN");
     }
@@ -476,6 +485,7 @@ export class BotController {
 
   private async handleMention(interaction: ButtonInteraction, recruitmentId: number): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
+    this.requireRecruitmentOperator(interaction, recruitment, "전체 멘션");
     const members = this.repository.listQueueMembers(recruitment.id);
     if (members.length === 0) {
       throw new DomainError(
@@ -512,8 +522,8 @@ export class BotController {
     recruitmentId: number,
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
+    this.requireRecruitmentOperator(interaction, recruitment, "전체 소환");
     const unlimited = this.hasUnlimitedSummonAccess(interaction);
-    this.requireSummonOperator(interaction, recruitment, unlimited);
     if (!unlimited && recruitment.summonState !== "AVAILABLE") {
       throw new DomainError("올 소환은 이 모집에서 이미 사용됐어요.", "SUMMON_ALREADY_USED");
     }
@@ -530,8 +540,8 @@ export class BotController {
     recruitmentId: number,
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
+    this.requireRecruitmentOperator(interaction, recruitment, "전체 소환");
     const unlimited = this.hasUnlimitedSummonAccess(interaction);
-    this.requireSummonOperator(interaction, recruitment, unlimited);
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     if (
@@ -609,7 +619,7 @@ export class BotController {
       }
     }
     const usageMessage = unlimited
-      ? "관리자 권한으로 횟수 제한 없이 올 소환을 실행했어요."
+      ? "운영자 권한으로 횟수 제한 없이 올 소환을 실행했어요."
       : moved > 0
         ? "올 소환 사용을 완료했어요."
         : "실제로 이동한 사람이 없어 사용 횟수는 소모하지 않았어요.";
@@ -620,7 +630,7 @@ export class BotController {
 
   private async handleDelete(interaction: ButtonInteraction, recruitmentId: number): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
-    this.requireCreatorOrAdministrator(interaction, recruitment, "삭제");
+    this.requireRecruitmentOperator(interaction, recruitment, "삭제");
     const guild = this.requireGuild(interaction);
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const channel = recruitment.channelId
@@ -668,15 +678,23 @@ export class BotController {
     return recruitment;
   }
 
-  private requireCreatorOrAdministrator(
+  private requireRecruitmentOperator(
     interaction: RecruitmentInteraction,
     recruitment: Recruitment,
     actionName: string,
   ): void {
-    if (interaction.user.id !== recruitment.creatorId && !isAdministrator(interaction)) {
+    this.requireInhouseRoleActionAccess(interaction);
+    if (
+      !canManageRecruitment(
+        interaction,
+        recruitment.creatorId,
+        INHOUSE_MANAGER_ROLE_ID,
+        INHOUSE_ROLE_ID,
+      )
+    ) {
       throw new DomainError(
-        `${actionName} 기능은 모집 생성자 또는 관리자만 사용할 수 있어요.`,
-        "CREATOR_OR_ADMIN_ONLY",
+        `권한이 부족해요. ${actionName} 기능은 모집 생성자, Discord 관리자 또는 내전관리자만 사용할 수 있어요.`,
+        "RECRUITMENT_OPERATOR_ONLY",
       );
     }
   }
@@ -687,15 +705,13 @@ export class BotController {
     }
   }
 
-  private requireSummonOperator(
-    interaction: RecruitmentInteraction,
-    recruitment: Recruitment,
-    unlimited: boolean,
+  private requireInhouseRoleActionAccess(
+    interaction: RecruitmentInteraction | ChatInputCommandInteraction,
   ): void {
-    if (interaction.user.id !== recruitment.creatorId && !unlimited) {
+    if (interactionHasRole(interaction, INHOUSE_ROLE_ID)) {
       throw new DomainError(
-        "올 소환은 모집 생성자, 관리자 또는 내전관리자만 사용할 수 있어요.",
-        "SUMMON_OPERATOR_ONLY",
+        "권한이 부족해요. 내전 역할 사용자는 신청하기와 쫄튀하기만 사용할 수 있어요.",
+        "INHOUSE_ROLE_ACTION_RESTRICTED",
       );
     }
   }
