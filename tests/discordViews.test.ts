@@ -21,6 +21,7 @@ import { applicationCommands } from "../src/discord/commands.js";
 import {
   INHOUSE_MANAGER_ROLE_ID,
   INHOUSE_ROLE_ID,
+  NEW_MEMBER_ROLE_ID,
   PANEL_CHANNEL_NAME,
   SUMMON_VOICE_CHANNEL_ID,
 } from "../src/discord/constants.js";
@@ -28,7 +29,7 @@ import {
   buildRecruitmentPermissionOverwrites,
   canManageRecruitment,
   hasUnlimitedSummonPermission,
-  interactionHasRole,
+  interactionHasAnyRole,
   isInhouseRoleActionAllowed,
 } from "../src/discord/helpers.js";
 import {
@@ -569,14 +570,21 @@ describe("Discord views", () => {
     ).toBe(false);
   });
 
-  it("identifies only the external inhouse role for Riot ID collection", () => {
+  it("collects Riot IDs from external inhouse and new-member roles", () => {
     const interaction = (roleIds: string[]): RepliableInteraction =>
       ({ member: { roles: roleIds } }) as unknown as RepliableInteraction;
+    const requiresRiotId = (roleIds: string[]) =>
+      interactionHasAnyRole(
+        interaction(roleIds),
+        [INHOUSE_ROLE_ID, NEW_MEMBER_ROLE_ID],
+      );
 
-    expect(interactionHasRole(interaction([INHOUSE_ROLE_ID]), INHOUSE_ROLE_ID)).toBe(true);
-    expect(interactionHasRole(interaction(["rookie-role"]), INHOUSE_ROLE_ID)).toBe(false);
-    expect(interactionHasRole(interaction(["regular-role"]), INHOUSE_ROLE_ID)).toBe(false);
-    expect(interactionHasRole(interaction([]), INHOUSE_ROLE_ID)).toBe(false);
+    expect(requiresRiotId([INHOUSE_ROLE_ID])).toBe(true);
+    expect(requiresRiotId([NEW_MEMBER_ROLE_ID])).toBe(true);
+    expect(requiresRiotId([INHOUSE_ROLE_ID, NEW_MEMBER_ROLE_ID])).toBe(true);
+    expect(requiresRiotId(["regular-role"])).toBe(false);
+    expect(requiresRiotId([])).toBe(false);
+    expect(NEW_MEMBER_ROLE_ID).toBe("721919159780507749");
   });
 
   it("allows the external inhouse role to join and leave only", () => {

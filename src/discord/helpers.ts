@@ -28,6 +28,13 @@ export function interactionHasRole(
   return Array.isArray(roles) ? roles.includes(roleId) : roles.cache.has(roleId);
 }
 
+export function interactionHasAnyRole(
+  interaction: RepliableInteraction,
+  roleIds: readonly string[],
+): boolean {
+  return roleIds.some((roleId) => interactionHasRole(interaction, roleId));
+}
+
 export function isInhouseRoleActionAllowed(action: string): boolean {
   return action === "join" || action === "leave" || action === "join-submit";
 }

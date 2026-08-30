@@ -46,6 +46,7 @@ import {
   INHOUSE_MANAGER_ROLE_ID,
   INHOUSE_ROLE_ID,
   MENTION_MESSAGE_LIFETIME_MS,
+  NEW_MEMBER_ROLE_ID,
   PANEL_CHANNEL_NAME,
   RECRUITMENT_THREAD_NAME,
   SUMMON_CONFIRMATION_TEXT,
@@ -60,6 +61,7 @@ import {
   buildRecruitmentPermissionOverwrites,
   canManageRecruitment,
   hasUnlimitedSummonPermission,
+  interactionHasAnyRole,
   interactionHasRole,
   isAdministrator,
   isInhouseRoleActionAllowed,
@@ -377,7 +379,9 @@ export class BotController {
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
     this.requireOpenRegistration(recruitment);
-    if (interactionHasRole(interaction, INHOUSE_ROLE_ID)) {
+    if (
+      interactionHasAnyRole(interaction, [INHOUSE_ROLE_ID, NEW_MEMBER_ROLE_ID])
+    ) {
       await interaction.showModal(buildJoinModal(recruitment.id));
       return;
     }
