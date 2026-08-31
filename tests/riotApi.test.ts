@@ -17,7 +17,6 @@ describe("Riot rank API", () => {
       if (url.includes("/riot/account/")) {
         return jsonResponse({ puuid: "puuid-1", gameName: "정식이름", tagLine: "클로버" });
       }
-      if (url.includes("/lol/summoner/")) return jsonResponse({ id: "summoner-1" });
       return jsonResponse([
         { queueType: "RANKED_FLEX_SR", tier: "SILVER", rank: "I", leaguePoints: 80 },
         { queueType: "RANKED_SOLO_5x5", tier: "GOLD", rank: "II", leaguePoints: 31 },
@@ -46,10 +45,12 @@ describe("Riot rank API", () => {
       leaguePoints: 31,
     });
     expect(second).toEqual(first);
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(2);
     expect(calls[0]?.url).toContain("americas.api.riotgames.com/riot/account/v1/accounts/by-riot-id/");
-    expect(calls[1]?.url).toContain("na1.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/");
-    expect(calls[2]?.url).toContain("na1.api.riotgames.com/lol/league/v4/entries/by-summoner/");
+    expect(calls[1]?.url).toContain(
+      "na1.api.riotgames.com/lol/league/v4/entries/by-puuid/puuid-1",
+    );
+    expect(calls.some((call) => call.url.includes("/lol/summoner/"))).toBe(false);
     expect(calls.every((call) => call.token === "secret-key")).toBe(true);
   });
 
@@ -96,6 +97,34 @@ describe("Riot rank API", () => {
       division: null,
       leaguePoints: null,
     });
+  });
+
+  it("does not mislabel a League API 404 as an unknown Riot ID", async () => {
+    const calls: string[] = [];
+    const fetchImpl = (async (input: string | URL | Request) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.includes("/riot/account/")) {
+        return jsonResponse({ puuid: "puuid-known", gameName: "Known", tagLine: "NA1" });
+      }
+      return jsonResponse({ status: { message: "not found" } }, 404);
+    }) as typeof fetch;
+    const service = new RiotRankService({
+      apiKey: "secret-key",
+      regionalRoute: "americas",
+      platformRoute: "na1",
+      cacheTtlMs: 60_000,
+      requestIntervalMs: 0,
+      fetchImpl,
+    });
+
+    await expect(service.lookup({ name: "Known", tag: "NA1" })).resolves.toMatchObject({
+      riotName: "Known",
+      riotTag: "NA1",
+      status: "API_ERROR",
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toContain("/lol/league/v4/entries/by-puuid/puuid-known");
   });
 
   it("halts new requests for Riot's Retry-After window after a 429", async () => {

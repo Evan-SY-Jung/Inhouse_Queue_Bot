@@ -41,10 +41,6 @@ interface AccountDto {
   tagLine?: string;
 }
 
-interface SummonerDto {
-  id: string;
-}
-
 interface LeagueEntryDto {
   queueType: string;
   tier: string;
@@ -128,57 +124,59 @@ export class RiotRankService implements RiotRankLookup {
   }
 
   private async lookupUncached(riotId: RiotId): Promise<RiotRankResult> {
+    let account: AccountDto;
     try {
-      const account = await this.requestJson<AccountDto>(
+      account = await this.requestJson<AccountDto>(
         `https://${this.regionalRoute}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(riotId.name)}/${encodeURIComponent(riotId.tag)}`,
       );
-      if (!account || typeof account.puuid !== "string" || !account.puuid) {
-        throw new Error("Riot Account API 응답에 PUUID가 없습니다.");
-      }
-
-      const resolvedId = {
-        name:
-          typeof account.gameName === "string" && account.gameName.trim()
-            ? account.gameName.trim()
-            : riotId.name,
-        tag:
-          typeof account.tagLine === "string" && account.tagLine.trim()
-            ? account.tagLine.trim()
-            : riotId.tag,
-      };
-      const summoner = await this.requestJson<SummonerDto>(
-        `https://${this.platformRoute}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${encodeURIComponent(account.puuid)}`,
-      );
-      if (!summoner || typeof summoner.id !== "string" || !summoner.id) {
-        throw new Error("Riot Summoner API 응답에 summoner ID가 없습니다.");
-      }
-
-      const entries = await this.requestJson<LeagueEntryDto[]>(
-        `https://${this.platformRoute}.api.riotgames.com/lol/league/v4/entries/by-summoner/${encodeURIComponent(summoner.id)}`,
-      );
-      if (!Array.isArray(entries)) {
-        throw new Error("Riot League API 응답이 배열이 아닙니다.");
-      }
-      const entry =
-        entries.find((candidate) => candidate.queueType === "RANKED_SOLO_5x5") ??
-        entries.find((candidate) => candidate.queueType === "RANKED_FLEX_SR");
-      if (!entry) return emptyRank(resolvedId, "UNRANKED");
-
-      return {
-        riotName: resolvedId.name,
-        riotTag: resolvedId.tag,
-        status: "RANKED",
-        queue: entry.queueType === "RANKED_SOLO_5x5" ? "SOLO" : "FLEX",
-        tier: stringOrNull(entry.tier)?.toUpperCase() ?? null,
-        division: stringOrNull(entry.rank)?.toUpperCase() ?? null,
-        leaguePoints: finiteNumberOrNull(entry.leaguePoints),
-      };
     } catch (error) {
       if (error instanceof RiotApiRequestError && error.status === 404) {
         return emptyRank(riotId, "NOT_FOUND");
       }
       return emptyRank(riotId, "API_ERROR");
     }
+
+    if (!account || typeof account.puuid !== "string" || !account.puuid) {
+      return emptyRank(riotId, "API_ERROR");
+    }
+
+    const resolvedId = {
+      name:
+        typeof account.gameName === "string" && account.gameName.trim()
+          ? account.gameName.trim()
+          : riotId.name,
+      tag:
+        typeof account.tagLine === "string" && account.tagLine.trim()
+          ? account.tagLine.trim()
+          : riotId.tag,
+    };
+
+    let entries: LeagueEntryDto[];
+    try {
+      entries = await this.requestJson<LeagueEntryDto[]>(
+        `https://${this.platformRoute}.api.riotgames.com/lol/league/v4/entries/by-puuid/${encodeURIComponent(account.puuid)}`,
+      );
+    } catch {
+      return emptyRank(resolvedId, "API_ERROR");
+    }
+    if (!Array.isArray(entries)) {
+      return emptyRank(resolvedId, "API_ERROR");
+    }
+
+    const entry =
+      entries.find((candidate) => candidate.queueType === "RANKED_SOLO_5x5") ??
+      entries.find((candidate) => candidate.queueType === "RANKED_FLEX_SR");
+    if (!entry) return emptyRank(resolvedId, "UNRANKED");
+
+    return {
+      riotName: resolvedId.name,
+      riotTag: resolvedId.tag,
+      status: "RANKED",
+      queue: entry.queueType === "RANKED_SOLO_5x5" ? "SOLO" : "FLEX",
+      tier: stringOrNull(entry.tier)?.toUpperCase() ?? null,
+      division: stringOrNull(entry.rank)?.toUpperCase() ?? null,
+      leaguePoints: finiteNumberOrNull(entry.leaguePoints),
+    };
   }
 
   private async requestJson<T>(url: string): Promise<T> {
