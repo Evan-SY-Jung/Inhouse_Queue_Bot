@@ -1,4 +1,4 @@
-import { comparePlayersByRank } from "./rankSort.js?v=4";
+import { comparePlayersByRank, formatRankLabel } from "./rankSort.js?v=5";
 
 const SESSION_VERSION = 2;
 const LEGACY_SESSION_VERSION = 1;
@@ -107,12 +107,11 @@ function buildPlayerCards() {
   for (const player of players) {
     const card = elements.playerTemplate.content.firstElementChild.cloneNode(true);
     card.dataset.playerId = player.id;
-    card.querySelector(".display-name").textContent = player.displayName;
     card.querySelector(".riot-id").textContent = `${player.riotName} #${player.riotTag}`;
 
     const avatar = card.querySelector(".discord-avatar");
     const avatarFallback = card.querySelector(".avatar-fallback");
-    avatarFallback.textContent = avatarInitial(player.displayName);
+    avatarFallback.textContent = avatarInitial(player.riotName);
     const avatarSource = discordAvatarUrl(player);
     if (avatarSource) {
       avatar.src = avatarSource;
@@ -120,12 +119,12 @@ function buildPlayerCards() {
     }
 
     const badge = card.querySelector(".rank-badge");
-    badge.textContent = formatRank(player);
+    badge.textContent = formatRankLabel(player);
     if (player.tier) badge.dataset.tier = player.tier;
     badge.title = rankTitle(player);
     card.setAttribute(
       "aria-label",
-      `${player.position}번 ${player.displayName}, ${player.riotName} #${player.riotTag}, ${formatRank(player)}`,
+      `${player.position}번 ${player.riotName} #${player.riotTag}, ${formatRankLabel(player)}`,
     );
     card.addEventListener("pointerdown", startDrag);
     card.addEventListener("keydown", handleCardKeyboard);
@@ -137,11 +136,9 @@ function buildPlayerCards() {
 function fitQueueWidth() {
   let requiredWidth = 440;
   for (const card of cards.values()) {
-    const displayNameWidth = card.querySelector(".display-name").scrollWidth;
     const riotIdWidth = card.querySelector(".riot-id").scrollWidth;
-    const identityWidth = Math.max(displayNameWidth, riotIdWidth);
     const rankWidth = card.querySelector(".rank-badge").scrollWidth;
-    requiredWidth = Math.max(requiredWidth, Math.ceil(identityWidth + rankWidth + 192));
+    requiredWidth = Math.max(requiredWidth, Math.ceil(riotIdWidth + rankWidth + 192));
   }
   elements.draftLayout.style.setProperty("--queue-panel-width", `${requiredWidth}px`);
 }
@@ -339,21 +336,9 @@ function discordAvatarUrl(player) {
   return null;
 }
 
-function formatRank(player) {
-  if (player.status === "RANKED") {
-    const division = player.division ? ` ${player.division}` : "";
-    const points = player.leaguePoints === null ? "" : ` ${player.leaguePoints}LP`;
-    return `${player.tier}${division}${points}`;
-  }
-  if (player.status === "UNRANKED") return "UNRANKED";
-  if (player.status === "NOT_FOUND") return "ID 확인";
-  if (player.status === "API_UNAVAILABLE") return "API 미설정";
-  return "조회 실패";
-}
-
 function rankTitle(player) {
-  if (player.status !== "RANKED") return formatRank(player);
-  return `${player.queue === "SOLO" ? "솔로 랭크" : "자유 랭크"} · ${formatRank(player)}`;
+  if (player.status !== "RANKED") return formatRankLabel(player);
+  return `${player.queue === "SOLO" ? "솔로 랭크" : "자유 랭크"} · ${formatRankLabel(player)}`;
 }
 
 function saveLayout() {

@@ -10,7 +10,7 @@ import type {
 import { parseRiotId, type RiotId } from "./riotId.js";
 
 export const TEAM_BUILDER_SESSION_VERSION = 2;
-const TEAM_BUILDER_WEB_VERSION = 4;
+const TEAM_BUILDER_WEB_VERSION = 5;
 const DEFAULT_MAX_URL_LENGTH = 1_700;
 
 type RankStatusCode = "R" | "U" | "N" | "K" | "E";

@@ -413,30 +413,19 @@ h2 {
   min-width: 0;
 }
 
-.display-name,
 .riot-id {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.display-name {
   color: #ffffff;
-  font-size: 0.96rem;
+  font-size: 1rem;
   font-weight: 900;
   line-height: 1.25;
 }
 
-.riot-id {
-  margin-top: 6px;
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 650;
-}
-
 .rank-badge {
-  max-width: 128px;
+  max-width: 170px;
   padding: 8px 9px;
   overflow: hidden;
   border: 1px solid var(--line-strong);

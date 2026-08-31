@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { comparePlayersByRank } from "../web/rankSort.js";
+import { comparePlayersByRank, formatRankLabel } from "../web/rankSort.js";
 
 function ranked(name, position, tier, division, leaguePoints) {
   return { name, position, status: "RANKED", tier, division, leaguePoints };
@@ -35,5 +35,28 @@ describe("team builder rank sorting", () => {
       "Challenger",
       "Unranked",
     ]);
+  });
+
+  it("formats every rank tier in Korean", () => {
+    const labels = [
+      ["IRON", "아이언"],
+      ["BRONZE", "브론즈"],
+      ["SILVER", "실버"],
+      ["GOLD", "골드"],
+      ["PLATINUM", "플래티넘"],
+      ["EMERALD", "에메랄드"],
+      ["DIAMOND", "다이아몬드"],
+      ["MASTER", "마스터"],
+      ["GRANDMASTER", "그랜드마스터"],
+      ["CHALLENGER", "챌린저"],
+    ];
+
+    for (const [tier, label] of labels) {
+      const usesLeaguePointsOnly = ["MASTER", "GRANDMASTER", "CHALLENGER"].includes(tier);
+      expect(formatRankLabel(ranked(tier, 1, tier, usesLeaguePointsOnly ? null : "IV", 72))).toBe(
+        `${label}${usesLeaguePointsOnly ? "" : " IV"} 72LP`,
+      );
+    }
+    expect(formatRankLabel({ status: "UNRANKED" })).toBe("언랭크");
   });
 });

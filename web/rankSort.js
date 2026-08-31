@@ -17,6 +17,19 @@ const DIVISION_ORDER = new Map(
   ["IV", "III", "II", "I"].map((division, index) => [division, index]),
 );
 
+const TIER_LABELS = new Map([
+  ["IRON", "아이언"],
+  ["BRONZE", "브론즈"],
+  ["SILVER", "실버"],
+  ["GOLD", "골드"],
+  ["PLATINUM", "플래티넘"],
+  ["EMERALD", "에메랄드"],
+  ["DIAMOND", "다이아몬드"],
+  ["MASTER", "마스터"],
+  ["GRANDMASTER", "그랜드마스터"],
+  ["CHALLENGER", "챌린저"],
+]);
+
 export function comparePlayersByRank(left, right, direction) {
   const leftRank = rankParts(left);
   const rightRank = rankParts(right);
@@ -31,6 +44,19 @@ export function comparePlayersByRank(left, right, direction) {
     if (difference !== 0) return difference * multiplier;
   }
   return left.position - right.position;
+}
+
+export function formatRankLabel(player) {
+  if (player.status === "RANKED") {
+    const tier = TIER_LABELS.get(player.tier?.toUpperCase()) ?? player.tier ?? "티어 미확인";
+    const division = player.division ? ` ${player.division}` : "";
+    const points = Number.isFinite(player.leaguePoints) ? ` ${player.leaguePoints}LP` : "";
+    return `${tier}${division}${points}`;
+  }
+  if (player.status === "UNRANKED") return "언랭크";
+  if (player.status === "NOT_FOUND") return "ID 확인";
+  if (player.status === "API_UNAVAILABLE") return "API 미설정";
+  return "조회 실패";
 }
 
 function rankParts(player) {
