@@ -101,7 +101,7 @@ describe("team builder session", () => {
     const session = decodeTeamBuilderSession(url.hash.slice("#s=".length));
 
     expect(url.origin + url.pathname).toBe("https://example.github.io/Inhouse_Queue_Bot/");
-    expect(url.searchParams.get("v")).toBe("3");
+    expect(url.searchParams.get("v")).toBe("4");
     expect(result).toMatchObject({
       selectedCount: 13,
       excludedCount: 0,

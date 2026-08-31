@@ -1,3 +1,5 @@
+import { comparePlayersByRank } from "./rankSort.js?v=4";
+
 const SESSION_VERSION = 2;
 const LEGACY_SESSION_VERSION = 1;
 const SNAP_DISTANCE = 150;
@@ -8,8 +10,11 @@ const elements = {
   emptyTitle: document.querySelector("#emptyTitle"),
   emptyDescription: document.querySelector("#emptyDescription"),
   workspace: document.querySelector("#workspace"),
+  draftLayout: document.querySelector("#draftLayout") ?? document.querySelector(".draft-layout"),
   playerPool: document.querySelector("#playerPool"),
   poolCount: document.querySelector("#poolCount"),
+  sortHigh: document.querySelector("#sortHigh"),
+  sortLow: document.querySelector("#sortLow"),
   teamsGrid: document.querySelector("#teamsGrid"),
   excludedNote: document.querySelector("#excludedNote"),
   teamTemplate: document.querySelector("#teamTemplate"),
@@ -23,6 +28,9 @@ let cards = new Map();
 let zones = new Map();
 let dragState = null;
 let toastTimer = null;
+
+elements.sortHigh?.addEventListener("click", () => sortPlayerPool("high"));
+elements.sortLow?.addEventListener("click", () => sortPlayerPool("low"));
 
 try {
   session = await readSession();
@@ -62,6 +70,7 @@ function initializeWorkspace(value) {
 
   buildTeamBoards(value);
   buildPlayerCards();
+  fitQueueWidth();
 
   if (value.excludedCount > 0) {
     elements.excludedNote.hidden = false;
@@ -123,6 +132,33 @@ function buildPlayerCards() {
     cards.set(player.id, card);
     elements.playerPool.append(card);
   }
+}
+
+function fitQueueWidth() {
+  let requiredWidth = 440;
+  for (const card of cards.values()) {
+    const displayNameWidth = card.querySelector(".display-name").scrollWidth;
+    const riotIdWidth = card.querySelector(".riot-id").scrollWidth;
+    const identityWidth = Math.max(displayNameWidth, riotIdWidth);
+    const rankWidth = card.querySelector(".rank-badge").scrollWidth;
+    requiredWidth = Math.max(requiredWidth, Math.ceil(identityWidth + rankWidth + 192));
+  }
+  elements.draftLayout.style.setProperty("--queue-panel-width", `${requiredWidth}px`);
+}
+
+function sortPlayerPool(direction) {
+  if (dragState) return;
+  const queueCards = [...elements.playerPool.querySelectorAll(":scope > .player-card")];
+  queueCards.sort((left, right) =>
+    comparePlayersByRank(
+      playerById(left.dataset.playerId),
+      playerById(right.dataset.playerId),
+      direction,
+    ),
+  );
+  elements.playerPool.append(...queueCards);
+  saveLayout();
+  showToast(`대기열을 티어 ${direction === "high" ? "높은 순" : "낮은 순"}으로 정렬했습니다.`);
 }
 
 function startDrag(event) {

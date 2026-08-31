@@ -1,6 +1,6 @@
 {
   "name": "cr-inhouse-queue-bot",
-  "version": "0.6.3",
+  "version": "0.7.0",
   "private": true,
   "description": "CR Clan Discord in-house queue bot",
   "type": "module",
@@ -16,7 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.test.json",
-    "check:web": "node --check web/app.js",
+    "check:web": "node --check web/app.js && node --check web/rankSort.js",
     "check": "npm run typecheck && npm run check:web && npm test"
   },
   "dependencies": {
