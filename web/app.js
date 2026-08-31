@@ -1,7 +1,6 @@
-import { comparePlayersByRank, formatRankLabel } from "./rankSort.js?v=5";
+import { comparePlayersByRank, formatRankLabel } from "./rankSort.js?v=6";
+import { parseTeamBuilderSession } from "./sessionParser.js?v=6";
 
-const SESSION_VERSION = 2;
-const LEGACY_SESSION_VERSION = 1;
 const SNAP_DISTANCE = 150;
 
 const elements = {
@@ -67,6 +66,7 @@ function initializeWorkspace(value) {
     id: `p${index + 1}`,
     position: index + 1,
   }));
+  elements.playerPool.classList.toggle("multi-column", players.length > 10);
 
   buildTeamBoards(value);
   buildPlayerCards();
@@ -109,19 +109,10 @@ function buildPlayerCards() {
     card.dataset.playerId = player.id;
     card.querySelector(".riot-id").textContent = `${player.riotName} #${player.riotTag}`;
 
-    const avatar = card.querySelector(".discord-avatar");
-    const avatarFallback = card.querySelector(".avatar-fallback");
-    avatarFallback.textContent = avatarInitial(player.riotName);
-    const avatarSource = discordAvatarUrl(player);
-    if (avatarSource) {
-      avatar.src = avatarSource;
-      avatar.addEventListener("error", () => avatar.removeAttribute("src"), { once: true });
-    }
-
-    const badge = card.querySelector(".rank-badge");
-    badge.textContent = formatRankLabel(player);
-    if (player.tier) badge.dataset.tier = player.tier;
-    badge.title = rankTitle(player);
+    const rankLabel = card.querySelector(".rank-label");
+    rankLabel.textContent = formatRankLabel(player);
+    if (player.tier) rankLabel.dataset.tier = player.tier;
+    rankLabel.title = rankTitle(player);
     card.setAttribute(
       "aria-label",
       `${player.position}번 ${player.riotName} #${player.riotTag}, ${formatRankLabel(player)}`,
@@ -134,12 +125,14 @@ function buildPlayerCards() {
 }
 
 function fitQueueWidth() {
-  let requiredWidth = 440;
+  let cardWidth = 250;
   for (const card of cards.values()) {
     const riotIdWidth = card.querySelector(".riot-id").scrollWidth;
-    const rankWidth = card.querySelector(".rank-badge").scrollWidth;
-    requiredWidth = Math.max(requiredWidth, Math.ceil(riotIdWidth + rankWidth + 192));
+    const rankWidth = card.querySelector(".rank-label").scrollWidth;
+    cardWidth = Math.max(cardWidth, Math.ceil(Math.max(riotIdWidth, rankWidth) + 24));
   }
+  const columns = elements.playerPool.classList.contains("multi-column") ? 2 : 1;
+  const requiredWidth = Math.max(340, cardWidth * columns + (columns - 1) * 6 + 30);
   elements.draftLayout.style.setProperty("--queue-panel-width", `${requiredWidth}px`);
 }
 
@@ -316,26 +309,6 @@ function updateBoard() {
   }
 }
 
-function avatarInitial(displayName) {
-  return [...displayName.trim()][0]?.toLocaleUpperCase("ko-KR") ?? "?";
-}
-
-function discordAvatarUrl(player) {
-  if (!player.userId || !player.avatarRef) return null;
-  const kind = player.avatarRef[0];
-  const value = player.avatarRef.slice(1);
-  if (kind === "d") {
-    return `https://cdn.discordapp.com/embed/avatars/${value}.png`;
-  }
-  if (kind === "u") {
-    return `https://cdn.discordapp.com/avatars/${player.userId}/${value}.webp?size=128`;
-  }
-  if (kind === "g" && session.guildId) {
-    return `https://cdn.discordapp.com/guilds/${session.guildId}/users/${player.userId}/avatars/${value}.webp?size=128`;
-  }
-  return null;
-}
-
 function rankTitle(player) {
   if (player.status !== "RANKED") return formatRankLabel(player);
   return `${player.queue === "SOLO" ? "솔로 랭크" : "자유 랭크"} · ${formatRankLabel(player)}`;
@@ -411,7 +384,7 @@ async function readSession() {
   const compressed = base64UrlToBytes(encoded);
   const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream("gzip"));
   const parsed = JSON.parse(await new Response(stream).text());
-  return parseSession(parsed);
+  return parseTeamBuilderSession(parsed);
 }
 
 function base64UrlToBytes(value) {
@@ -419,117 +392,4 @@ function base64UrlToBytes(value) {
   const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
   const binary = atob(padded);
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
-}
-
-function parseSession(value) {
-  if (!Array.isArray(value)) {
-    throw new Error("지원하지 않는 팀 편성 세션입니다.");
-  }
-  const version = value[0];
-  let recruitmentId;
-  let gameCode;
-  let guildId;
-  let generatedAt;
-  let expiresAt;
-  let teamSize;
-  let excludedCount;
-  let rows;
-
-  if (version === SESSION_VERSION && value.length === 9) {
-    [
-      ,
-      recruitmentId,
-      gameCode,
-      guildId,
-      generatedAt,
-      expiresAt,
-      teamSize,
-      excludedCount,
-      rows,
-    ] = value;
-  } else if (version === LEGACY_SESSION_VERSION && value.length === 8) {
-    [, recruitmentId, gameCode, generatedAt, expiresAt, teamSize, excludedCount, rows] = value;
-    guildId = "";
-  } else {
-    throw new Error("지원하지 않는 팀 편성 세션입니다.");
-  }
-
-  if (
-    !Number.isInteger(recruitmentId) ||
-    !["R", "A"].includes(gameCode) ||
-    (version === SESSION_VERSION && !/^\d{17,20}$/.test(guildId)) ||
-    !Number.isInteger(generatedAt) ||
-    !Number.isInteger(expiresAt) ||
-    !Number.isInteger(teamSize) ||
-    teamSize < 1 ||
-    !Number.isInteger(excludedCount) ||
-    excludedCount < 0 ||
-    !Array.isArray(rows) ||
-    rows.length < 1 ||
-    rows.length > teamSize * 4
-  ) {
-    throw new Error("팀 편성 세션 값이 올바르지 않습니다.");
-  }
-  return {
-    version,
-    recruitmentId,
-    gameType: gameCode === "R" ? "RIFT" : "ARAM",
-    guildId,
-    generatedAt,
-    expiresAt,
-    teamSize,
-    excludedCount,
-    players: rows.map((row) => parsePlayer(row, version)),
-  };
-}
-
-function parsePlayer(row, version) {
-  const expectedLength = version === SESSION_VERSION ? 10 : 8;
-  if (!Array.isArray(row) || row.length !== expectedLength) {
-    throw new Error("참가자 데이터가 올바르지 않습니다.");
-  }
-  const [
-    displayName,
-    compactRiotName,
-    riotTag,
-    statusCode,
-    queueCode,
-    tier,
-    division,
-    points,
-    userId = "",
-    avatarRef = "",
-  ] = row;
-  if (
-    typeof displayName !== "string" ||
-    displayName.length > 40 ||
-    typeof compactRiotName !== "string" ||
-    compactRiotName.length > 32 ||
-    typeof riotTag !== "string" ||
-    riotTag.length > 10 ||
-    !["R", "U", "N", "K", "E"].includes(statusCode) ||
-    !["S", "F", ""].includes(queueCode) ||
-    typeof tier !== "string" ||
-    typeof division !== "string" ||
-    !Number.isFinite(points) ||
-    (version === SESSION_VERSION && !/^\d{17,20}$/.test(userId)) ||
-    (version === SESSION_VERSION &&
-      !(/^[gu](?:a_)?[a-f0-9]{32}$/.test(avatarRef) || /^d[0-5]$/.test(avatarRef)))
-  ) {
-    throw new Error("참가자 값이 올바르지 않습니다.");
-  }
-  return {
-    displayName,
-    riotName: compactRiotName || displayName,
-    riotTag,
-    userId,
-    avatarRef,
-    status: { R: "RANKED", U: "UNRANKED", N: "NOT_FOUND", K: "API_UNAVAILABLE", E: "API_ERROR" }[
-      statusCode
-    ],
-    queue: queueCode === "S" ? "SOLO" : queueCode === "F" ? "FLEX" : null,
-    tier: tier || null,
-    division: division || null,
-    leaguePoints: points >= 0 ? points : null,
-  };
 }

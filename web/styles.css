@@ -10,9 +10,9 @@
   --accent: #b8f36a;
   --accent-dark: #1b2a0e;
   --warning: #f2bd55;
-  --radius: 16px;
+  --radius: 13px;
   --shadow: 0 18px 46px rgb(0 0 0 / 34%);
-  --queue-panel-width: 440px;
+  --queue-panel-width: 340px;
   font-family:
     Inter, Pretendard, "Noto Sans KR", system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
@@ -130,7 +130,7 @@ h2 {
 
 .workspace {
   display: grid;
-  gap: 20px;
+  gap: 14px;
 }
 
 .panel {
@@ -143,20 +143,20 @@ h2 {
 .draft-layout {
   display: grid;
   grid-template-columns: var(--queue-panel-width) minmax(0, 1fr);
-  gap: 20px;
+  gap: 14px;
   align-items: start;
 }
 
 .queue-panel {
   position: sticky;
   top: 116px;
-  padding: 20px;
+  padding: 14px;
 }
 
 .panel-heading {
   justify-content: space-between;
   gap: 14px;
-  margin-bottom: 16px;
+  margin-bottom: 11px;
 }
 
 .queue-heading-title,
@@ -205,8 +205,8 @@ h2 {
 
 .count-badge,
 .team-count {
-  min-width: 46px;
-  padding: 7px 11px;
+  min-width: 40px;
+  padding: 5px 9px;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   color: #d7deea;
@@ -220,7 +220,7 @@ h2 {
 .teams-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  gap: 14px;
 }
 
 .team-panel {
@@ -244,8 +244,8 @@ h2 {
 .team-heading {
   justify-content: space-between;
   gap: 14px;
-  min-height: 66px;
-  padding: 13px 16px;
+  min-height: 48px;
+  padding: 8px 11px;
   border-bottom: 1px solid var(--line);
   background: #141c28;
 }
@@ -253,26 +253,26 @@ h2 {
 .team-heading > div {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 8px;
 }
 
 .team-number {
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--team-accent) 68%, #ffffff 0%);
   border-radius: 50%;
   color: #071019;
   background: var(--team-accent);
   box-shadow: 0 0 18px color-mix(in srgb, var(--team-accent) 24%, transparent);
-  font-size: 0.95rem;
+  font-size: 0.8rem;
   font-weight: 950;
 }
 
 .team-title {
   color: var(--text);
-  font-size: 1.05rem;
+  font-size: 0.94rem;
   letter-spacing: -0.02em;
 }
 
@@ -280,8 +280,8 @@ h2 {
   position: relative;
   display: grid;
   align-content: start;
-  gap: 10px;
-  padding: 11px;
+  gap: 6px;
+  padding: 8px;
   transition:
     border-color 150ms ease,
     background 150ms ease,
@@ -290,7 +290,7 @@ h2 {
 
 .player-pool {
   max-height: calc(100vh - 222px);
-  min-height: 210px;
+  min-height: 160px;
   overflow: auto;
   border: 1px dashed var(--line-strong);
   border-radius: 12px;
@@ -299,7 +299,7 @@ h2 {
 }
 
 .team-drop {
-  min-height: 462px;
+  min-height: 300px;
   background: var(--surface-soft);
 }
 
@@ -334,13 +334,12 @@ h2 {
 
 .player-card {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
-  gap: 13px;
-  min-height: 80px;
-  padding: 11px 13px;
+  min-height: 52px;
+  padding: 7px 10px;
   border: 1px solid #334055;
-  border-radius: 13px;
+  border-radius: 9px;
   background: linear-gradient(145deg, #1b2535, #151d29);
   box-shadow: 0 7px 17px rgb(0 0 0 / 25%);
   cursor: grab;
@@ -371,42 +370,10 @@ h2 {
 }
 
 .card-placeholder {
-  min-height: 80px;
+  min-height: 52px;
   border: 1px dashed #64748c;
-  border-radius: 13px;
+  border-radius: 9px;
   background: #121925;
-}
-
-.profile-avatar {
-  position: relative;
-  display: grid;
-  width: 56px;
-  height: 56px;
-  flex: 0 0 auto;
-  place-items: center;
-  overflow: hidden;
-  border: 2px solid #4b5b72;
-  border-radius: 50%;
-  color: #e8f0fc;
-  background: linear-gradient(145deg, #34445c, #202b3c);
-  box-shadow: 0 5px 14px rgb(0 0 0 / 32%);
-}
-
-.avatar-fallback {
-  font-size: 1.1rem;
-  font-weight: 950;
-}
-
-.discord-avatar {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.discord-avatar:not([src]) {
-  display: none;
 }
 
 .player-identity {
@@ -419,60 +386,68 @@ h2 {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #ffffff;
-  font-size: 1rem;
+  font-size: 0.88rem;
   font-weight: 900;
   line-height: 1.25;
 }
 
-.rank-badge {
-  max-width: 170px;
-  padding: 8px 9px;
+.rank-label {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  margin-top: 3px;
   overflow: hidden;
-  border: 1px solid var(--line-strong);
-  border-radius: 9px;
-  color: #d6deea;
-  background: #202a39;
+  color: var(--muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.69rem;
+  font-size: 0.67rem;
   font-weight: 950;
-  line-height: 1.15;
+  line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.rank-badge[data-tier="IRON"],
-.rank-badge[data-tier="BRONZE"] {
-  border-color: #966c51;
-  color: #e1b08d;
-  background: #2d2019;
+.rank-label[data-tier="IRON"] {
+  color: #9da6ae;
 }
 
-.rank-badge[data-tier="SILVER"] {
-  border-color: #71859a;
-  color: #d1deea;
-  background: #202c37;
+.rank-label[data-tier="BRONZE"] {
+  color: #c88a62;
 }
 
-.rank-badge[data-tier="GOLD"] {
-  border-color: #b88a38;
-  color: #f6d57d;
-  background: #302613;
+.rank-label[data-tier="SILVER"] {
+  color: #c1cfda;
 }
 
-.rank-badge[data-tier="PLATINUM"],
-.rank-badge[data-tier="EMERALD"] {
-  border-color: #3c9d83;
-  color: #88e8ca;
-  background: #12332c;
+.rank-label[data-tier="GOLD"] {
+  color: #efc75f;
 }
 
-.rank-badge[data-tier="DIAMOND"],
-.rank-badge[data-tier="MASTER"],
-.rank-badge[data-tier="GRANDMASTER"],
-.rank-badge[data-tier="CHALLENGER"] {
-  border-color: #8875cc;
-  color: #d0c2ff;
-  background: #2a2242;
+.rank-label[data-tier="PLATINUM"] {
+  color: #58c5b1;
+}
+
+.rank-label[data-tier="EMERALD"] {
+  color: #4ed58a;
+}
+
+.rank-label[data-tier="DIAMOND"] {
+  color: #75a9ff;
+}
+
+.rank-label[data-tier="MASTER"] {
+  color: #b882ff;
+}
+
+.rank-label[data-tier="GRANDMASTER"] {
+  color: #ff6f82;
+}
+
+.rank-label[data-tier="CHALLENGER"] {
+  color: #f1d26d;
+}
+
+.player-pool.multi-column {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .snap-pulse {
@@ -540,7 +515,8 @@ h2 {
 
 @media (max-width: 760px) {
   .teams-grid,
-  .player-pool {
+  .player-pool,
+  .player-pool.multi-column {
     grid-template-columns: 1fr;
   }
 
@@ -568,18 +544,7 @@ h2 {
 
 @media (max-width: 480px) {
   .player-card {
-    grid-template-columns: 50px minmax(0, 1fr);
-  }
-
-  .profile-avatar {
-    width: 50px;
-    height: 50px;
-  }
-
-  .rank-badge {
-    grid-column: 2;
-    justify-self: start;
-    max-width: 100%;
+    padding-inline: 9px;
   }
 }
 

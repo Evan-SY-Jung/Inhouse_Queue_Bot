@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { QueueMember, Recruitment } from "../src/domain/models.js";
 import type { RiotRankLookup } from "../src/services/riotApi.js";
@@ -8,10 +7,9 @@ import {
   TeamBuilderService,
 } from "../src/services/teamBuilder.js";
 
-const recruitment: Pick<Recruitment, "id" | "gameType" | "guildId"> = {
+const recruitment: Pick<Recruitment, "id" | "gameType"> = {
   id: 77,
   gameType: "RIFT",
-  guildId: "1542873758770135061",
 };
 
 function members(count: number): QueueMember[] {
@@ -92,16 +90,12 @@ describe("team builder session", () => {
     });
 
     const selectedMembers = members(13);
-    const avatarRefs = new Map([
-      [selectedMembers[0]!.userId, "u0123456789abcdef0123456789abcdef"],
-      [selectedMembers[1]!.userId, "ga_abcdef0123456789abcdef0123456789"],
-    ]);
-    const result = await service.createLink(recruitment, selectedMembers, avatarRefs);
+    const result = await service.createLink(recruitment, selectedMembers);
     const url = new URL(result.url);
     const session = decodeTeamBuilderSession(url.hash.slice("#s=".length));
 
     expect(url.origin + url.pathname).toBe("https://example.github.io/Inhouse_Queue_Bot/");
-    expect(url.searchParams.get("v")).toBe("5");
+    expect(url.searchParams.get("v")).toBe("6");
     expect(result).toMatchObject({
       selectedCount: 13,
       excludedCount: 0,
@@ -110,10 +104,9 @@ describe("team builder session", () => {
       unavailableCount: 0,
     });
     expect(session).toMatchObject({
-      version: 2,
+      version: 3,
       recruitmentId: 77,
       gameType: "RIFT",
-      guildId: "1542873758770135061",
       generatedAt: 1_800_000_000,
       expiresAt: 1_800_003_600,
       teamSize: 5,
@@ -121,18 +114,18 @@ describe("team builder session", () => {
     });
     expect(session.players).toHaveLength(13);
     expect(session.players[0]).toMatchObject({
-      displayName: "정멤1",
       riotName: "정멤1",
       riotTag: "클로버",
       tier: "GOLD",
-      avatarRef: "u0123456789abcdef0123456789abcdef",
     });
     expect(session.players[1]).toMatchObject({
-      displayName: "정멤2",
       riotName: "신입롤닉",
       riotTag: "NEW1",
-      avatarRef: "ga_abcdef0123456789abcdef0123456789",
     });
+    expect(session).not.toHaveProperty("guildId");
+    expect(session.players[0]).not.toHaveProperty("displayName");
+    expect(session.players[0]).not.toHaveProperty("userId");
+    expect(session.players[0]).not.toHaveProperty("avatarRef");
     expect(result.url).not.toContain("secret");
   });
 
@@ -163,18 +156,12 @@ describe("team builder session", () => {
     });
 
     const allMembers = members(40);
-    const avatarRefs = new Map(
-      allMembers.slice(0, 20).map((member) => [
-        member.userId,
-        `u${createHash("md5").update(member.userId).digest("hex")}`,
-      ]),
-    );
-    const result = await service.createLink(recruitment, allMembers, avatarRefs);
+    const result = await service.createLink(recruitment, allMembers);
     const session = decodeTeamBuilderSession(new URL(result.url).hash.slice("#s=".length));
 
     expect(result.selectedCount).toBe(20);
     expect(result.excludedCount).toBe(20);
     expect(session.players).toHaveLength(20);
-    expect(result.url.length).toBeLessThan(1_700);
+    expect(result.url.length).toBeLessThan(1_000);
   });
 });

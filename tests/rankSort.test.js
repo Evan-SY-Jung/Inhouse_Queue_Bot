@@ -37,26 +37,29 @@ describe("team builder rank sorting", () => {
     ]);
   });
 
-  it("formats every rank tier in Korean", () => {
+  it("formats every rank tier as a compact code", () => {
     const labels = [
-      ["IRON", "아이언"],
-      ["BRONZE", "브론즈"],
-      ["SILVER", "실버"],
-      ["GOLD", "골드"],
-      ["PLATINUM", "플래티넘"],
-      ["EMERALD", "에메랄드"],
-      ["DIAMOND", "다이아몬드"],
-      ["MASTER", "마스터"],
-      ["GRANDMASTER", "그랜드마스터"],
-      ["CHALLENGER", "챌린저"],
+      ["IRON", "I3"],
+      ["BRONZE", "B3"],
+      ["SILVER", "S3"],
+      ["GOLD", "G3"],
+      ["PLATINUM", "P3"],
+      ["EMERALD", "E3"],
+      ["DIAMOND", "D3"],
+      ["MASTER", "M72"],
+      ["GRANDMASTER", "GM72"],
+      ["CHALLENGER", "C72"],
     ];
 
-    for (const [tier, label] of labels) {
+    for (const [tier, expected] of labels) {
       const usesLeaguePointsOnly = ["MASTER", "GRANDMASTER", "CHALLENGER"].includes(tier);
-      expect(formatRankLabel(ranked(tier, 1, tier, usesLeaguePointsOnly ? null : "IV", 72))).toBe(
-        `${label}${usesLeaguePointsOnly ? "" : " IV"} 72LP`,
-      );
+      expect(
+        formatRankLabel(ranked(tier, 1, tier, usesLeaguePointsOnly ? null : "III", 72)),
+      ).toBe(expected);
     }
-    expect(formatRankLabel({ status: "UNRANKED" })).toBe("언랭크");
+    expect(formatRankLabel(ranked("Bronze", 1, "BRONZE", "III", 20))).toBe("B3");
+    expect(formatRankLabel(ranked("Diamond", 1, "DIAMOND", "I", 99))).toBe("D1");
+    expect(formatRankLabel(ranked("Master", 1, "MASTER", null, 327))).toBe("M327");
+    expect(formatRankLabel({ status: "UNRANKED" })).toBe("언랭");
   });
 });

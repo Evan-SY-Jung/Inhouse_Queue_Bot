@@ -9,8 +9,8 @@ import type {
 } from "./riotApi.js";
 import { parseRiotId, type RiotId } from "./riotId.js";
 
-export const TEAM_BUILDER_SESSION_VERSION = 2;
-const TEAM_BUILDER_WEB_VERSION = 5;
+export const TEAM_BUILDER_SESSION_VERSION = 3;
+const TEAM_BUILDER_WEB_VERSION = 6;
 const DEFAULT_MAX_URL_LENGTH = 1_700;
 
 type RankStatusCode = "R" | "U" | "N" | "K" | "E";
@@ -18,7 +18,6 @@ type RankQueueCode = "S" | "F" | "";
 type GameTypeCode = "R" | "A";
 
 type CompactPlayer = [
-  displayName: string,
   riotName: string,
   riotTag: string,
   status: RankStatusCode,
@@ -26,15 +25,12 @@ type CompactPlayer = [
   tier: string,
   division: string,
   leaguePoints: number,
-  userId: string,
-  avatarRef: string,
 ];
 
 type CompactSession = [
   version: typeof TEAM_BUILDER_SESSION_VERSION,
   recruitmentId: number,
   gameType: GameTypeCode,
-  guildId: string,
   generatedAt: number,
   expiresAt: number,
   teamSize: number,
@@ -43,11 +39,8 @@ type CompactSession = [
 ];
 
 export interface TeamBuilderPlayer {
-  displayName: string;
   riotName: string;
   riotTag: string;
-  userId: string;
-  avatarRef: string;
   status: RiotRankStatus;
   queue: RiotRankQueue | null;
   tier: string | null;
@@ -59,7 +52,6 @@ export interface TeamBuilderSession {
   version: typeof TEAM_BUILDER_SESSION_VERSION;
   recruitmentId: number;
   gameType: GameType;
-  guildId: string;
   generatedAt: number;
   expiresAt: number;
   teamSize: number;
@@ -99,9 +91,8 @@ export class TeamBuilderService {
   }
 
   async createLink(
-    recruitment: Pick<Recruitment, "id" | "gameType" | "guildId">,
+    recruitment: Pick<Recruitment, "id" | "gameType">,
     members: readonly QueueMember[],
-    avatarRefs: ReadonlyMap<string, string> = new Map(),
   ): Promise<TeamBuilderLinkResult> {
     const callSize = this.options.callSize;
     if (!Number.isInteger(callSize) || callSize < 2 || callSize % 2 !== 0) {
@@ -134,14 +125,11 @@ export class TeamBuilderService {
       version: TEAM_BUILDER_SESSION_VERSION,
       recruitmentId: recruitment.id,
       gameType: recruitment.gameType,
-      guildId: recruitment.guildId,
       generatedAt: Math.floor(generatedAtMs / 1_000),
       expiresAt: Math.floor(expiresAtMs / 1_000),
       teamSize: callSize / 2,
       excludedCount: members.length - selectedCount,
-      players: selected.map((member, index) =>
-        toTeamBuilderPlayer(member, ranks[index]!, avatarRefs.get(member.userId)),
-      ),
+      players: ranks.map(toTeamBuilderPlayer),
     };
     const encoded = encodeTeamBuilderSession(session);
     const url = new URL(this.options.baseUrl);
@@ -224,22 +212,18 @@ export function encodeTeamBuilderSession(session: TeamBuilderSession): string {
     TEAM_BUILDER_SESSION_VERSION,
     session.recruitmentId,
     session.gameType === "RIFT" ? "R" : "A",
-    session.guildId,
     session.generatedAt,
     session.expiresAt,
     session.teamSize,
     session.excludedCount,
     session.players.map((player) => [
-      player.displayName.slice(0, 40),
-      player.riotName === player.displayName ? "" : player.riotName.slice(0, 32),
+      player.riotName.slice(0, 32),
       player.riotTag.slice(0, 10),
       statusToCode(player.status),
       queueToCode(player.queue),
       player.tier ?? "",
       player.division ?? "",
       player.leaguePoints ?? -1,
-      player.userId,
-      normalizeAvatarRef(player.avatarRef, player.userId),
     ]),
   ];
   return gzipSync(Buffer.from(JSON.stringify(compact)), { level: 9 }).toString("base64url");
@@ -249,14 +233,13 @@ export function decodeTeamBuilderSession(encoded: string): TeamBuilderSession {
   const parsed = JSON.parse(
     gunzipSync(Buffer.from(encoded, "base64url")).toString("utf8"),
   ) as unknown;
-  if (!Array.isArray(parsed) || parsed.length !== 9 || parsed[0] !== TEAM_BUILDER_SESSION_VERSION) {
+  if (!Array.isArray(parsed) || parsed.length !== 8 || parsed[0] !== TEAM_BUILDER_SESSION_VERSION) {
     throw new Error("지원하지 않는 팀 편성 세션입니다.");
   }
   const [
     version,
     recruitmentId,
     gameCode,
-    guildId,
     generatedAt,
     expiresAt,
     teamSize,
@@ -266,7 +249,6 @@ export function decodeTeamBuilderSession(encoded: string): TeamBuilderSession {
   if (
     typeof recruitmentId !== "number" ||
     (gameCode !== "R" && gameCode !== "A") ||
-    typeof guildId !== "string" ||
     typeof generatedAt !== "number" ||
     typeof expiresAt !== "number" ||
     typeof teamSize !== "number" ||
@@ -280,7 +262,6 @@ export function decodeTeamBuilderSession(encoded: string): TeamBuilderSession {
     version,
     recruitmentId,
     gameType: gameCode === "R" ? "RIFT" : "ARAM",
-    guildId,
     generatedAt,
     expiresAt,
     teamSize,
@@ -289,17 +270,10 @@ export function decodeTeamBuilderSession(encoded: string): TeamBuilderSession {
   };
 }
 
-function toTeamBuilderPlayer(
-  member: QueueMember,
-  rank: RiotRankResult,
-  avatarRef: string | undefined,
-): TeamBuilderPlayer {
+function toTeamBuilderPlayer(rank: RiotRankResult): TeamBuilderPlayer {
   return {
-    displayName: member.displayName,
     riotName: rank.riotName,
     riotTag: rank.riotTag,
-    userId: member.userId,
-    avatarRef: normalizeAvatarRef(avatarRef, member.userId),
     status: rank.status,
     queue: rank.queue,
     tier: rank.tier,
@@ -309,66 +283,38 @@ function toTeamBuilderPlayer(
 }
 
 function decodePlayer(value: unknown): TeamBuilderPlayer {
-  if (!Array.isArray(value) || value.length !== 10) {
+  if (!Array.isArray(value) || value.length !== 7) {
     throw new Error("팀 편성 참가자 형식이 올바르지 않습니다.");
   }
   const [
-    displayName,
-    compactRiotName,
+    riotName,
     riotTag,
     statusCode,
     queueCode,
     tier,
     division,
     points,
-    userId,
-    avatarRef,
   ] = value;
   if (
-    typeof displayName !== "string" ||
-    typeof compactRiotName !== "string" ||
+    typeof riotName !== "string" ||
     typeof riotTag !== "string" ||
     typeof statusCode !== "string" ||
     typeof queueCode !== "string" ||
     typeof tier !== "string" ||
     typeof division !== "string" ||
-    typeof points !== "number" ||
-    typeof userId !== "string" ||
-    typeof avatarRef !== "string" ||
-    normalizeAvatarRef(avatarRef, userId) !== avatarRef
+    typeof points !== "number"
   ) {
     throw new Error("팀 편성 참가자 값이 올바르지 않습니다.");
   }
   return {
-    displayName,
-    riotName: compactRiotName || displayName,
+    riotName,
     riotTag,
-    userId,
-    avatarRef,
     status: codeToStatus(statusCode),
     queue: codeToQueue(queueCode),
     tier: tier || null,
     division: division || null,
     leaguePoints: points >= 0 ? points : null,
   };
-}
-
-export function defaultDiscordAvatarRef(userId: string): string {
-  try {
-    return `d${Number((BigInt(userId) >> 22n) % 6n)}`;
-  } catch {
-    return "d0";
-  }
-}
-
-function normalizeAvatarRef(value: string | undefined, userId: string): string {
-  if (
-    typeof value === "string" &&
-    (/^[gu](?:a_)?[a-f0-9]{32}$/.test(value) || /^d[0-5]$/.test(value))
-  ) {
-    return value;
-  }
-  return defaultDiscordAvatarRef(userId);
 }
 
 function statusToCode(status: RiotRankStatus): RankStatusCode {

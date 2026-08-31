@@ -57,7 +57,9 @@ Discord 서버에서 협곡·아람 내전을 즉시 또는 예약 시간으로 
   - 신입·외부인은 신청 때 직접 입력한 Riot ID로 티어 조회
   - 솔로 랭크를 우선하고, 없으면 자유 랭크, 둘 다 없으면 언랭으로 표시
   - Riot API 키가 없거나 개별 조회가 실패해도 편성판은 열리고 해당 카드만 미조회로 표시
-  - 참가자 카드에는 Discord 표시 이름 대신 `Riot 닉네임 #태그`만 표시하고 티어 명칭은 한국어로 표시
+  - 참가자 카드에는 Discord 이름·프로필 사진 없이 `Riot 닉네임 #태그`만 표시
+  - 티어는 닉네임 아래에 티어별 색상으로 `B3`, `D1`, `M327`, `GM540`처럼 축약 표시
+  - 11명 이상이면 대기열을 2열로 바꾸고 카드와 팀 패널을 압축해 20명 편성 가시성 확보
   - 1·2번 팀은 첫 줄, 3·4번 팀은 둘째 줄에 배치하고 남은 가로 공간에 맞춰 대기열 폭을 가장 긴 Riot ID 기준으로 자동 확장
   - 모든 참가자는 처음에 대기열에 표시되며 티어 높은 순·낮은 순 정렬, 이름표 포인터 드래그, 팀 칸 자석 스냅, 세션 복구 지원
   - 참가자 데이터는 만료 시간이 있는 압축 URL 조각에만 들어가며 Riot API 키와 Discord 토큰은 웹으로 전달하지 않음
@@ -143,7 +145,7 @@ npm run dev
 - `src/services/queuePresentation.ts` — 참가 순번과 멘션·소환 선착순 대상 계산
 - `src/services/riotId.ts` — 모집별 라이엇 닉네임·태그 검증
 - `src/services/riotApi.ts` — Account/League API 티어 조회, 속도 제한, 메모리 캐시
-- `src/services/teamBuilder.ts` — 정멤 Riot ID 해석과 Discord 프로필·티어가 포함된 압축형 팀 편성 링크 생성
+- `src/services/teamBuilder.ts` — 정멤 Riot ID 해석과 티어가 포함된 압축형 팀 편성 링크 생성
 - `src/services/teamFormation.ts` — 선착순 10/20명의 무작위 5:5 팀 편성
 - `src/db/sqliteSchema.ts` — SQLite 스키마와 마이그레이션
 - `src/db/sqliteRepository.ts` — DB 읽기·쓰기와 트랜잭션
@@ -212,7 +214,7 @@ TEAM_BUILDER_SESSION_MINUTES=60
 
 토큰은 채팅, Git, 스크린샷에 노출하지 마세요. 노출되었다면 Developer Portal에서 즉시 재발급해야 합니다.
 
-`RIOT_API_KEY`는 [Riot Developer Portal](https://developer.riotgames.com/)에서 발급합니다. 개발용 키는 만료될 수 있으므로 운영 중 티어가 전부 `API 미설정` 또는 `조회 실패`로 보이면 키 상태부터 확인하세요. 키를 비워도 기존 모집·신청·소환 기능과 수동 팀 편성판은 계속 동작합니다.
+`RIOT_API_KEY`는 [Riot Developer Portal](https://developer.riotgames.com/)에서 발급합니다. 개발용 키는 만료될 수 있으므로 운영 중 티어가 전부 `API 없음` 또는 `조회 오류`로 보이면 키 상태부터 확인하세요. 키를 비워도 기존 모집·신청·소환 기능과 수동 팀 편성판은 계속 동작합니다.
 
 현재 공식 League-V4 응답은 현재 랭크만 제공하므로 과거 모든 시즌을 소급한 최고 티어는 표시하지 않습니다. 이후 조회된 최고 기록을 별도 DB에 누적하는 기능은 추가할 수 있습니다.
 
@@ -234,7 +236,7 @@ npm run dev
 3. **Actions** 탭의 `Deploy team builder to GitHub Pages` 실행이 성공했는지 확인합니다.
 4. 공개 주소 `https://evan-sy-jung.github.io/Inhouse_Queue_Bot/`가 열리는지 확인합니다.
 
-다른 주소를 사용하면 봇 서버의 `TEAM_BUILDER_BASE_URL`도 같은 주소로 바꿔야 합니다. 웹페이지는 Riot API나 Discord API를 직접 호출하지 않습니다. 봇 프로세스가 티어와 Discord 프로필 식별 정보를 준비한 뒤, 최대 20명의 표시용 데이터만 브라우저에서 해제하는 URL 조각(`#s=...`)으로 전달합니다. 프로필 이미지는 브라우저가 Discord CDN에서 불러오며 토큰과 API 키는 링크에 포함되지 않습니다. 링크를 받은 사람은 참가자 정보를 볼 수 있으므로 공개 채널에 링크 자체를 다시 올리지 않는 것이 좋습니다.
+다른 주소를 사용하면 봇 서버의 `TEAM_BUILDER_BASE_URL`도 같은 주소로 바꿔야 합니다. 웹페이지는 Riot API나 Discord API를 직접 호출하지 않습니다. 봇 프로세스가 Riot ID와 티어를 준비한 뒤, 최대 20명의 표시용 데이터만 브라우저에서 해제하는 URL 조각(`#s=...`)으로 전달합니다. Discord 사용자 ID·표시 이름·프로필 사진과 토큰·API 키는 링크에 포함되지 않습니다. 링크를 받은 사람은 참가자 Riot ID를 볼 수 있으므로 공개 채널에 링크 자체를 다시 올리지 않는 것이 좋습니다.
 
 ## Docker 실행
 

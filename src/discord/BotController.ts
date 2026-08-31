@@ -8,7 +8,6 @@ import {
   type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Guild,
-  type GuildMember,
   type Interaction,
   type ModalSubmitInteraction,
   type TextChannel,
@@ -35,10 +34,7 @@ import {
   ReservationTimeError,
 } from "../services/reservationTime.js";
 import { parseRiotId } from "../services/riotId.js";
-import {
-  defaultDiscordAvatarRef,
-  type TeamBuilderService,
-} from "../services/teamBuilder.js";
+import type { TeamBuilderService } from "../services/teamBuilder.js";
 import {
   buildImmediateRecruitmentModal,
   buildJoinModal,
@@ -480,15 +476,7 @@ export class BotController {
     }
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const avatarRefs = await this.loadTeamBuilderAvatarRefs(
-      this.requireGuild(interaction),
-      members,
-    );
-    const result = await this.teamBuilderService.createLink(
-      recruitment,
-      members,
-      avatarRefs,
-    );
+    const result = await this.teamBuilderService.createLink(recruitment, members);
     const excludedMessage =
       result.excludedCount > 0
         ? ` · 후순위 제외 ${result.excludedCount}명`
@@ -502,26 +490,6 @@ export class BotController {
       ].join("\n"),
       allowedMentions: { parse: [] },
     });
-  }
-
-  private async loadTeamBuilderAvatarRefs(
-    guild: Guild,
-    members: readonly QueueMember[],
-  ): Promise<Map<string, string>> {
-    const selected = members.slice(0, this.config.callSize * 2);
-    const entries = await Promise.all(
-      selected.map(async (member): Promise<readonly [string, string]> => {
-        try {
-          const guildMember =
-            guild.members.cache.get(member.userId) ??
-            (await guild.members.fetch(member.userId));
-          return [member.userId, compactDiscordAvatarRef(guildMember)];
-        } catch {
-          return [member.userId, defaultDiscordAvatarRef(member.userId)];
-        }
-      }),
-    );
-    return new Map(entries);
   }
 
   private async handleMention(interaction: ButtonInteraction, recruitmentId: number): Promise<void> {
@@ -813,14 +781,4 @@ export class BotController {
       console.error("오류 응답 전송 실패", responseError);
     }
   }
-}
-
-function compactDiscordAvatarRef(member: GuildMember): string {
-  if (member.avatar) return `g${member.avatar}`;
-  if (member.user.avatar) return `u${member.user.avatar}`;
-
-  const defaultIndex = /\/embed\/avatars\/(\d+)\.png/.exec(
-    member.user.defaultAvatarURL,
-  )?.[1];
-  return defaultIndex ? `d${defaultIndex}` : defaultDiscordAvatarRef(member.id);
 }
