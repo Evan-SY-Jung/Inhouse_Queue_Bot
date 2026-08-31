@@ -68,6 +68,18 @@ describe("team builder session", () => {
         "클로버",
       ),
     ).toEqual({ name: "AdminCarry", tag: "클로버" });
+    expect(
+      resolveQueueMemberRiotId(
+        { displayName: "♣ Hide on study 세준 05", riotName: null, riotTag: null },
+        "클로버",
+      ),
+    ).toEqual({ name: "Hide on study", tag: "클로버" });
+    expect(
+      resolveQueueMemberRiotId(
+        { displayName: "♣ 둔 기 현겸 98", riotName: null, riotTag: null },
+        "클로버",
+      ),
+    ).toEqual({ name: "둔 기", tag: "클로버" });
   });
 
   it("encodes partial games into an expiring URL fragment", async () => {

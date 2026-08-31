@@ -201,9 +201,12 @@ export function resolveQueueMemberRiotId(
 
 function extractMemberRiotName(displayName: string): string | null {
   const parts = displayName.trim().split(/\s+/u);
-  if (parts.length !== 4) return null;
+  if (parts.length < 4) return null;
 
-  const [roleMark, riotName, realName, memberNumber] = parts;
+  const roleMark = parts[0];
+  const realName = parts.at(-2);
+  const memberNumber = parts.at(-1);
+  const riotName = parts.slice(1, -2).join(" ");
   if (
     !roleMark ||
     !/^[^\p{L}\p{N}]+$/u.test(roleMark) ||
