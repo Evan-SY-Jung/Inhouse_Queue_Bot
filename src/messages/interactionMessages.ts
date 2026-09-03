@@ -47,7 +47,7 @@ export const INTERACTION_MESSAGES = {
     manualAdd: {
       title: "대기열 수동 추가",
       memberLabel: "추가할 서버 멤버",
-      memberDescription: "닉네임 일부만 입력해도 Discord가 가까운 후보를 보여줘요.",
+      memberDescription: "닉네임의 일부분만 입력해도, 자동으로 제일 가까운 후보군들을 알려줍니다.",
       memberPlaceholder: "닉네임 일부를 입력해 서버 멤버 검색",
     },
     manualRemove: {
@@ -77,9 +77,9 @@ export const INTERACTION_MESSAGES = {
     join: {
       title: "내전 신청",
       riotNameLabel: "라이엇 닉네임",
-      riotNamePlaceholder: "게임 이름",
+      riotNamePlaceholder: "예) 랑 음",
       riotTagLabel: "라이엇 태그",
-      riotTagPlaceholder: "NA1 또는 1234 (# 제외 가능)",
+      riotTagPlaceholder: "예) 클로버 (# 제외 가능)",
     },
     summon: {
       title: "전체 소환 최종 확인",
