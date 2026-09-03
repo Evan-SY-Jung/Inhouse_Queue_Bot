@@ -5,6 +5,7 @@ import type {
   CooldownResult,
   Panel,
   QueueMember,
+  QueueMutationOptions,
   QueueMutationResult,
   Recruitment,
 } from "../domain/models.js";
@@ -35,8 +36,15 @@ export interface RecruitmentRepository {
   toggleRegistration(recruitmentId: number): Recruitment;
 
   listQueueMembers(recruitmentId: number): QueueMember[];
-  addQueueMember(input: AddQueueMemberInput): QueueMutationResult;
-  removeQueueMember(recruitmentId: number, userId: string): QueueMutationResult;
+  addQueueMember(
+    input: AddQueueMemberInput,
+    options?: QueueMutationOptions,
+  ): QueueMutationResult;
+  removeQueueMember(
+    recruitmentId: number,
+    userId: string,
+    options?: QueueMutationOptions,
+  ): QueueMutationResult;
 
   tryAcquireCooldown(
     guildId: string,

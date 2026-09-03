@@ -90,6 +90,10 @@ export interface QueueMutationResult {
   members: QueueMember[];
 }
 
+export interface QueueMutationOptions {
+  allowClosedRegistration?: boolean;
+}
+
 export interface CooldownResult {
   acquired: boolean;
   remainingMs: number;

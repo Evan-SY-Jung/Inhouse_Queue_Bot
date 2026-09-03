@@ -10,6 +10,7 @@ import {
   type Guild,
   type Interaction,
   type ModalSubmitInteraction,
+  type StringSelectMenuInteraction,
   type TextChannel,
   type VoiceChannel,
 } from "discord.js";
@@ -36,8 +37,11 @@ import {
 import { parseRiotId } from "../services/riotId.js";
 import type { TeamBuilderService } from "../services/teamBuilder.js";
 import {
+  buildDeleteConfirmationButtons,
   buildImmediateRecruitmentModal,
   buildJoinModal,
+  buildManualAddModal,
+  buildManualRemoveRows,
   buildSetupModal,
   buildSummonModal,
 } from "./components.js";
@@ -59,6 +63,7 @@ import {
   asCategory,
   assertBotCanCreateRecruitments,
   buildRecruitmentPermissionOverwrites,
+  canManuallyManageQueue,
   canManageRecruitment,
   hasUnlimitedSummonPermission,
   interactionHasAnyRole,
@@ -76,7 +81,10 @@ import {
   type VoiceSummonResult,
 } from "./voiceSummon.js";
 
-type RecruitmentInteraction = ButtonInteraction | ModalSubmitInteraction;
+type RecruitmentInteraction =
+  | ButtonInteraction
+  | ModalSubmitInteraction
+  | StringSelectMenuInteraction;
 
 export class BotController {
   readonly client: Client;
@@ -129,6 +137,10 @@ export class BotController {
       }
       if (interaction.isModalSubmit()) {
         await this.handleModal(interaction);
+        return;
+      }
+      if (interaction.isStringSelectMenu()) {
+        await this.handleStringSelect(interaction);
       }
     } catch (error) {
       await this.respondWithError(interaction, error);
@@ -179,6 +191,12 @@ export class BotController {
       case "teams":
         await this.handleTeamFormation(interaction, customId.id);
         return;
+      case "manual-add":
+        await this.handleManualAddRequest(interaction, customId.id);
+        return;
+      case "manual-remove":
+        await this.handleManualRemoveRequest(interaction, customId.id);
+        return;
       case "mention":
         await this.handleMention(interaction, customId.id);
         return;
@@ -186,7 +204,13 @@ export class BotController {
         await this.handleSummonRequest(interaction, customId.id);
         return;
       case "delete":
-        await this.handleDelete(interaction, customId.id);
+        await this.handleDeleteRequest(interaction, customId.id);
+        return;
+      case "delete-confirm":
+        await this.handleDeleteConfirmation(interaction, customId.id);
+        return;
+      case "delete-cancel":
+        await this.handleDeleteCancellation(interaction, customId.id);
         return;
       case "manage":
         throw new DomainError("이전 관리 버튼은 더 이상 사용하지 않아요.", "MOVED_FEATURE");
@@ -216,6 +240,9 @@ export class BotController {
       case "join-submit":
         await this.handleJoinModal(interaction, customId.id);
         return;
+      case "manual-add-submit":
+        await this.handleManualAdd(interaction, customId.id);
+        return;
       case "reservation":
         throw new DomainError(
           "이전 예약 모달은 만료됐어요. 협곡 또는 아람 모집 버튼을 다시 눌러 주세요.",
@@ -227,6 +254,14 @@ export class BotController {
       default:
         return;
     }
+  }
+
+  private async handleStringSelect(
+    interaction: StringSelectMenuInteraction,
+  ): Promise<void> {
+    const customId = parseCustomId(interaction.customId);
+    if (!customId || customId.action !== "manual-remove-select") return;
+    await this.handleManualRemove(interaction, customId.id);
   }
 
   private async handleSetupModal(interaction: ModalSubmitInteraction): Promise<void> {
@@ -492,6 +527,110 @@ export class BotController {
     });
   }
 
+  private async handleManualAddRequest(
+    interaction: ButtonInteraction,
+    recruitmentId: number,
+  ): Promise<void> {
+    const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
+    this.requireManualQueueOperator(interaction, recruitment, "수동 추가");
+    await interaction.showModal(buildManualAddModal(recruitment.id));
+  }
+
+  private async handleManualAdd(
+    interaction: ModalSubmitInteraction,
+    recruitmentId: number,
+  ): Promise<void> {
+    const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
+    this.requireManualQueueOperator(interaction, recruitment, "수동 추가");
+    const selectedUser = interaction.fields
+      .getSelectedUsers("manual_member", true)
+      .first();
+    if (!selectedUser) {
+      throw new DomainError("추가할 서버 멤버를 선택해 주세요.", "MEMBER_NOT_SELECTED");
+    }
+    if (selectedUser.bot) {
+      throw new DomainError("봇 계정은 대기열에 추가할 수 없어요.", "BOT_NOT_ALLOWED");
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const guild = this.requireGuild(interaction);
+    const member = await guild.members.fetch(selectedUser.id).catch(() => null);
+    if (!member) {
+      throw new DomainError(
+        "선택한 사용자를 이 서버에서 찾지 못했어요.",
+        "GUILD_MEMBER_NOT_FOUND",
+      );
+    }
+
+    const result = this.repository.addQueueMember(
+      {
+        recruitmentId: recruitment.id,
+        userId: member.id,
+        displayName: member.displayName,
+        riotName: null,
+        riotTag: null,
+        now: Date.now(),
+        capacity: this.config.queueCapacity,
+      },
+      { allowClosedRegistration: true },
+    );
+    const refreshWarning = await this.stateService.tryRefreshRecruitmentMessage(recruitment.id);
+    await interaction.editReply({
+      content: `<@${member.id}>님을 대기열 **${result.position}번째**로 수동 추가했어요.${refreshWarning}`,
+      allowedMentions: { parse: [] },
+    });
+  }
+
+  private async handleManualRemoveRequest(
+    interaction: ButtonInteraction,
+    recruitmentId: number,
+  ): Promise<void> {
+    const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
+    this.requireManualQueueOperator(interaction, recruitment, "수동 제외");
+    const members = this.repository.listQueueMembers(recruitment.id);
+    if (members.length === 0) {
+      throw new DomainError("대기열에서 제외할 참가자가 없어요.", "NOT_ENOUGH_MEMBERS");
+    }
+
+    await interaction.reply({
+      content: "대기열에서 제외할 참가자를 선택해 주세요.",
+      components: buildManualRemoveRows(recruitment.id, members),
+      flags: MessageFlags.Ephemeral,
+      allowedMentions: { parse: [] },
+    });
+  }
+
+  private async handleManualRemove(
+    interaction: StringSelectMenuInteraction,
+    recruitmentId: number,
+  ): Promise<void> {
+    const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
+    this.requireManualQueueOperator(interaction, recruitment, "수동 제외");
+    const userId = interaction.values[0];
+    if (!userId) {
+      throw new DomainError("제외할 참가자를 선택해 주세요.", "MEMBER_NOT_SELECTED");
+    }
+    const members = this.repository.listQueueMembers(recruitment.id);
+    const position = members.findIndex((member) => member.userId === userId);
+    if (position < 0) {
+      throw new DomainError(
+        "선택한 참가자가 이미 대기열에서 빠졌어요. 수동 제외를 다시 눌러 주세요.",
+        "NOT_JOINED",
+      );
+    }
+
+    await interaction.deferUpdate();
+    this.repository.removeQueueMember(recruitment.id, userId, {
+      allowClosedRegistration: true,
+    });
+    const refreshWarning = await this.stateService.tryRefreshRecruitmentMessage(recruitment.id);
+    await interaction.editReply({
+      content: `대기열 **${position + 1}번째** <@${userId}>님을 수동 제외했어요.${refreshWarning}`,
+      components: [],
+      allowedMentions: { parse: [] },
+    });
+  }
+
   private async handleMention(interaction: ButtonInteraction, recruitmentId: number): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
     this.requireRecruitmentOperator(interaction, recruitment, "전체 멘션");
@@ -637,11 +776,39 @@ export class BotController {
     );
   }
 
-  private async handleDelete(interaction: ButtonInteraction, recruitmentId: number): Promise<void> {
+  private async handleDeleteRequest(
+    interaction: ButtonInteraction,
+    recruitmentId: number,
+  ): Promise<void> {
+    const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
+    this.requireRecruitmentOperator(interaction, recruitment, "삭제");
+    await interaction.reply({
+      content: "⚠️ 정말 이 모집 채널과 대기열을 삭제할까요? 삭제하면 되돌릴 수 없어요.",
+      components: buildDeleteConfirmationButtons(recruitment.id),
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  private async handleDeleteCancellation(
+    interaction: ButtonInteraction,
+    recruitmentId: number,
+  ): Promise<void> {
+    const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
+    this.requireRecruitmentOperator(interaction, recruitment, "삭제 취소");
+    await interaction.update({
+      content: "삭제를 취소했어요.",
+      components: [],
+    });
+  }
+
+  private async handleDeleteConfirmation(
+    interaction: ButtonInteraction,
+    recruitmentId: number,
+  ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
     this.requireRecruitmentOperator(interaction, recruitment, "삭제");
     const guild = this.requireGuild(interaction);
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await interaction.deferUpdate();
     const channel = recruitment.channelId
       ? await fetchGuildChannel(guild, recruitment.channelId)
       : null;
@@ -650,7 +817,7 @@ export class BotController {
       throw new DomainError("채널이 이미 삭제되어 모집 기록만 정리했어요.", "CHANNEL_ALREADY_DELETED");
     }
 
-    await interaction.editReply("모집 채널을 삭제합니다.");
+    await interaction.editReply({ content: "모집 채널을 삭제합니다.", components: [] });
     await channel.delete(`${interaction.user.tag}님의 내전 모집 삭제`);
     this.repository.closeRecruitment(recruitment.id, Date.now());
   }
@@ -711,6 +878,26 @@ export class BotController {
   private requireOpenRegistration(recruitment: Recruitment): void {
     if (recruitment.registrationState !== "OPEN") {
       throw new DomainError("이 내전은 참가 신청이 마감됐어요.", "REGISTRATION_CLOSED");
+    }
+  }
+
+  private requireManualQueueOperator(
+    interaction: RecruitmentInteraction,
+    recruitment: Recruitment,
+    actionName: string,
+  ): void {
+    this.requireInhouseRoleActionAccess(interaction);
+    if (
+      !canManuallyManageQueue(
+        interaction,
+        INHOUSE_MANAGER_ROLE_ID,
+        INHOUSE_ROLE_ID,
+      )
+    ) {
+      throw new DomainError(
+        `권한이 부족해요. ${actionName} 기능은 Discord 관리자 또는 내전관리자만 사용할 수 있어요.`,
+        "MANUAL_QUEUE_OPERATOR_ONLY",
+      );
     }
   }
 

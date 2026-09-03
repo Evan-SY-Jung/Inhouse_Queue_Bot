@@ -15,6 +15,7 @@ import type {
   CooldownResult,
   Panel,
   QueueMember,
+  QueueMutationOptions,
   QueueMutationResult,
   Recruitment,
 } from "../domain/models.js";
@@ -274,9 +275,15 @@ export class SqliteRecruitmentRepository implements RecruitmentRepository {
       .map((row) => mapQueueMember(row as SqlRow));
   }
 
-  addQueueMember(input: AddQueueMemberInput): QueueMutationResult {
+  addQueueMember(
+    input: AddQueueMemberInput,
+    options: QueueMutationOptions = {},
+  ): QueueMutationResult {
     return this.transaction(() => {
-      this.assertAcceptingRecruitment(input.recruitmentId);
+      this.assertAcceptingRecruitment(
+        input.recruitmentId,
+        options.allowClosedRegistration === true,
+      );
       const existing = this.db
         .prepare(
           "SELECT sequence FROM queue_members WHERE recruitment_id = ? AND user_id = ?",
@@ -312,9 +319,16 @@ export class SqliteRecruitmentRepository implements RecruitmentRepository {
     });
   }
 
-  removeQueueMember(recruitmentId: number, userId: string): QueueMutationResult {
+  removeQueueMember(
+    recruitmentId: number,
+    userId: string,
+    options: QueueMutationOptions = {},
+  ): QueueMutationResult {
     return this.transaction(() => {
-      this.assertAcceptingRecruitment(recruitmentId);
+      this.assertAcceptingRecruitment(
+        recruitmentId,
+        options.allowClosedRegistration === true,
+      );
       const row = this.db
         .prepare(
           "SELECT sequence FROM queue_members WHERE recruitment_id = ? AND user_id = ?",
@@ -448,12 +462,17 @@ export class SqliteRecruitmentRepository implements RecruitmentRepository {
     });
   }
 
-  private assertAcceptingRecruitment(recruitmentId: number): void {
+  private assertAcceptingRecruitment(
+    recruitmentId: number,
+    allowClosedRegistration = false,
+  ): void {
     const row = this.db
       .prepare("SELECT status, registration_state FROM recruitments WHERE id = ?")
       .get(recruitmentId) as SqlRow | undefined;
     if (!row || row.status !== "OPEN") throw new RecruitmentNotOpenError();
-    if (row.registration_state !== "OPEN") throw new RegistrationClosedError();
+    if (!allowClosedRegistration && row.registration_state !== "OPEN") {
+      throw new RegistrationClosedError();
+    }
   }
 
   private requirePanel(panelId: number): Panel {

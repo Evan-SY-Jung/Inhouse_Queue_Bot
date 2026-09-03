@@ -15,10 +15,18 @@ export const customIds = {
   leave: (recruitmentId: number) => `${PREFIX}:leave:${recruitmentId}`,
   close: (recruitmentId: number) => `${PREFIX}:close:${recruitmentId}`,
   teams: (recruitmentId: number) => `${PREFIX}:teams:${recruitmentId}`,
+  manualAdd: (recruitmentId: number) => `${PREFIX}:manual-add:${recruitmentId}`,
+  manualAddModal: (recruitmentId: number) =>
+    `${PREFIX}:manual-add-submit:${recruitmentId}`,
+  manualRemove: (recruitmentId: number) => `${PREFIX}:manual-remove:${recruitmentId}`,
+  manualRemoveSelect: (recruitmentId: number, page: number) =>
+    `${PREFIX}:manual-remove-select:${page}:${recruitmentId}`,
   mention: (recruitmentId: number) => `${PREFIX}:mention:${recruitmentId}`,
   summon: (recruitmentId: number) => `${PREFIX}:summon:${recruitmentId}`,
   summonModal: (recruitmentId: number) => `${PREFIX}:summon-confirm:${recruitmentId}`,
   delete: (recruitmentId: number) => `${PREFIX}:delete:${recruitmentId}`,
+  deleteConfirm: (recruitmentId: number) => `${PREFIX}:delete-confirm:${recruitmentId}`,
+  deleteCancel: (recruitmentId: number) => `${PREFIX}:delete-cancel:${recruitmentId}`,
   manage: (recruitmentId: number) => `${PREFIX}:manage:${recruitmentId}`,
 } as const;
 
@@ -31,7 +39,17 @@ export type ParsedCustomId =
       action: "join" | "leave" | "close" | "teams" | "mention" | "summon" | "delete" | "manage";
       id: number;
     }
-  | { action: "join-submit"; id: number }
+  | {
+      action:
+        | "join-submit"
+        | "manual-add"
+        | "manual-add-submit"
+        | "manual-remove"
+        | "delete-confirm"
+        | "delete-cancel";
+      id: number;
+    }
+  | { action: "manual-remove-select"; id: number; page: number }
   | { action: "summon-confirm"; id: number };
 
 export function parseCustomId(value: string): ParsedCustomId | null {
@@ -73,6 +91,17 @@ export function parseCustomId(value: string): ParsedCustomId | null {
   ) {
     return { action: "summon-confirm", id };
   }
+  if (
+    parts[1] === "manual-remove-select" &&
+    parts.length === 4 &&
+    Number.isSafeInteger(id) &&
+    id > 0
+  ) {
+    const page = Number(parts[2]);
+    if (Number.isSafeInteger(page) && page >= 0) {
+      return { action: "manual-remove-select", id, page };
+    }
+  }
 
   const actions = [
     "join",
@@ -82,6 +111,11 @@ export function parseCustomId(value: string): ParsedCustomId | null {
     "mention",
     "summon",
     "delete",
+    "delete-confirm",
+    "delete-cancel",
+    "manual-add",
+    "manual-add-submit",
+    "manual-remove",
     "manage",
   ] as const;
   if (

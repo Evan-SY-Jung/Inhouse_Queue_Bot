@@ -160,6 +160,37 @@ describe("SqliteRecruitmentRepository", () => {
     repository.close();
   });
 
+  it("lets an operator add and remove queue members while registration is closed", () => {
+    const repository = new SqliteRecruitmentRepository(":memory:");
+    const recruitment = createOpenRecruitment(repository);
+    addMember(repository, recruitment.id, 1);
+    repository.toggleRegistration(recruitment.id);
+
+    expect(() =>
+      repository.addQueueMember(
+        {
+          recruitmentId: recruitment.id,
+          userId: "manual-member",
+          displayName: "수동 참가자",
+          riotName: null,
+          riotTag: null,
+          now: 20,
+          capacity: 40,
+        },
+        { allowClosedRegistration: true },
+      ),
+    ).not.toThrow();
+    expect(() =>
+      repository.removeQueueMember(recruitment.id, "member-1", {
+        allowClosedRegistration: true,
+      }),
+    ).not.toThrow();
+    expect(repository.listQueueMembers(recruitment.id).map((entry) => entry.userId)).toEqual([
+      "manual-member",
+    ]);
+    repository.close();
+  });
+
   it("stores members without Riot IDs for direct member registration", () => {
     const repository = new SqliteRecruitmentRepository(":memory:");
     const recruitment = createOpenRecruitment(repository);

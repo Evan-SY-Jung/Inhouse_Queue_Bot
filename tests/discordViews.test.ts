@@ -10,8 +10,11 @@ import { buildRecruitmentChannelName } from "../src/services/channelNames.js";
 import { customIds, parseCustomId } from "../src/discord/customIds.js";
 import { buildPanelEmbed, buildRecruitmentEmbed } from "../src/discord/embeds.js";
 import {
+  buildDeleteConfirmationButtons,
   buildImmediateRecruitmentModal,
   buildJoinModal,
+  buildManualAddModal,
+  buildManualRemoveRows,
   buildPanelButtons,
   buildRecruitmentButtons,
   buildSetupModal,
@@ -27,6 +30,7 @@ import {
 } from "../src/discord/constants.js";
 import {
   buildRecruitmentPermissionOverwrites,
+  canManuallyManageQueue,
   canManageRecruitment,
   hasUnlimitedSummonPermission,
   interactionHasAnyRole,
@@ -318,6 +322,23 @@ describe("Discord views", () => {
     });
     expect(parseCustomId(customIds.close(7))).toEqual({ action: "close", id: 7 });
     expect(parseCustomId(customIds.teams(7))).toEqual({ action: "teams", id: 7 });
+    expect(parseCustomId(customIds.manualAdd(7))).toEqual({
+      action: "manual-add",
+      id: 7,
+    });
+    expect(parseCustomId(customIds.manualAddModal(7))).toEqual({
+      action: "manual-add-submit",
+      id: 7,
+    });
+    expect(parseCustomId(customIds.manualRemoveSelect(7, 1))).toEqual({
+      action: "manual-remove-select",
+      id: 7,
+      page: 1,
+    });
+    expect(parseCustomId(customIds.deleteConfirm(7))).toEqual({
+      action: "delete-confirm",
+      id: 7,
+    });
   });
 
   it("moves reservation setup into the Rift and ARAM recruitment buttons", () => {
@@ -381,6 +402,7 @@ describe("Discord views", () => {
     const setup = buildSetupModal().toJSON();
     const immediate = buildImmediateRecruitmentModal(1, "RIFT").toJSON();
     const join = buildJoinModal(7).toJSON();
+    const manualAdd = buildManualAddModal(7).toJSON();
     const summon = buildSummonModal(7).toJSON();
 
     expect(setup.components).toHaveLength(1);
@@ -412,6 +434,16 @@ describe("Discord views", () => {
     });
     expect(join.components[1]).toMatchObject({
       component: { custom_id: "riot_tag", required: true },
+    });
+    expect(manualAdd.custom_id).toBe("crq:manual-add-submit:7");
+    expect(manualAdd.components).toHaveLength(1);
+    expect(manualAdd.components[0]).toMatchObject({
+      component: {
+        custom_id: "manual_member",
+        min_values: 1,
+        max_values: 1,
+        required: true,
+      },
     });
     expect(summon.components).toHaveLength(1);
     expect(summon.custom_id).toBe("crq:summon-confirm:7");
@@ -470,7 +502,7 @@ describe("Discord views", () => {
         Array.from({ length: memberCount }, (_, index) => member(index + 1)),
         { callSize: 10, queueCapacity: 40 },
       );
-      return payload.components[1]?.toJSON().components[1];
+      return payload.components[0]?.toJSON().components[3];
     };
 
     expect(summonButton(9)).toMatchObject({ label: "전체 소환", disabled: true });
@@ -487,7 +519,7 @@ describe("Discord views", () => {
       { callSize: 10, queueCapacity: 40 },
     );
 
-    expect(payload.components[1]?.toJSON().components[1]).toMatchObject({
+    expect(payload.components[0]?.toJSON().components[3]).toMatchObject({
       label: "전체 소환",
       disabled: false,
     });
@@ -499,7 +531,7 @@ describe("Discord views", () => {
         { ...recruitment, registrationState },
         Array.from({ length: count }, (_, index) => member(index + 1)),
         { callSize: 10, queueCapacity: 40 },
-      ).components[0]!.toJSON().components[3];
+      ).components[1]!.toJSON().components[1];
 
     expect(teamButton("OPEN", 10)).toMatchObject({ label: "팀 짜기", disabled: true });
     expect(teamButton("CLOSED", 0)).toMatchObject({ label: "팀 짜기", disabled: true });
@@ -533,6 +565,49 @@ describe("Discord views", () => {
     expect(hasUnlimitedSummonPermission(interaction([]), INHOUSE_MANAGER_ROLE_ID)).toBe(
       false,
     );
+  });
+
+  it("limits manual queue changes to administrators and inhouse managers", () => {
+    const interaction = (
+      roleIds: string[],
+      permissions: bigint = 0n,
+    ): RepliableInteraction =>
+      ({
+        member: { roles: roleIds },
+        memberPermissions: new PermissionsBitField(permissions),
+      }) as unknown as RepliableInteraction;
+
+    expect(
+      canManuallyManageQueue(
+        interaction([INHOUSE_MANAGER_ROLE_ID]),
+        INHOUSE_MANAGER_ROLE_ID,
+        INHOUSE_ROLE_ID,
+      ),
+    ).toBe(true);
+    expect(
+      canManuallyManageQueue(
+        interaction([], PermissionFlagsBits.Administrator),
+        INHOUSE_MANAGER_ROLE_ID,
+        INHOUSE_ROLE_ID,
+      ),
+    ).toBe(true);
+    expect(
+      canManuallyManageQueue(
+        interaction([]),
+        INHOUSE_MANAGER_ROLE_ID,
+        INHOUSE_ROLE_ID,
+      ),
+    ).toBe(false);
+    expect(
+      canManuallyManageQueue(
+        interaction(
+          [INHOUSE_ROLE_ID, INHOUSE_MANAGER_ROLE_ID],
+          PermissionFlagsBits.Administrator,
+        ),
+        INHOUSE_MANAGER_ROLE_ID,
+        INHOUSE_ROLE_ID,
+      ),
+    ).toBe(false);
   });
 
   it("allows only creators or either operator type to manage recruitments", () => {
@@ -604,6 +679,12 @@ describe("Discord views", () => {
       "summon",
       "summon-confirm",
       "delete",
+      "delete-confirm",
+      "delete-cancel",
+      "manual-add",
+      "manual-add-submit",
+      "manual-remove",
+      "manual-remove-select",
       "setup",
     ]) {
       expect(isInhouseRoleActionAllowed(action)).toBe(false);
@@ -626,24 +707,67 @@ describe("Discord views", () => {
     expect(closedRows[0]?.components).toMatchObject([
       { label: "신청하기" },
       { label: "쫄튀하기" },
-      { label: "재오픈" },
-      { label: "팀 짜기" },
-      { label: "삭제" },
-    ]);
-    expect(closedRows[0]?.components[0]).toMatchObject({ disabled: true });
-    expect(closedRows[0]?.components[1]).toMatchObject({ disabled: true });
-    expect(closedRows[0]?.components[2]?.disabled).not.toBe(true);
-    expect(closedRows[1]?.components).toMatchObject([
       { label: "전체 멘션" },
       { label: "전체 소환" },
     ]);
-    expect(closedRows[1]?.components[1]).toMatchObject({ disabled: false });
+    expect(closedRows[0]?.components[0]).toMatchObject({ disabled: true });
+    expect(closedRows[0]?.components[1]).toMatchObject({ disabled: true });
+    expect(closedRows[1]?.components).toMatchObject([
+      { label: "재오픈" },
+      { label: "팀 짜기" },
+      { label: "수동 추가" },
+      { label: "수동 제외" },
+      { label: "삭제" },
+    ]);
+    expect(closedRows[0]?.components[3]).toMatchObject({ disabled: false });
+    expect(closedRows[1]?.components[0]?.disabled).not.toBe(true);
 
     expect(openRows[0]?.components[0]).toMatchObject({ disabled: false });
     expect(openRows[0]?.components[1]).toMatchObject({ disabled: false });
-    expect(openRows[0]?.components[2]).toMatchObject({ label: "마감하기" });
-    expect(openRows[0]?.components[2]?.disabled).not.toBe(true);
+    expect(openRows[1]?.components[0]).toMatchObject({ label: "마감하기" });
+    expect(openRows[1]?.components[0]?.disabled).not.toBe(true);
     expect(INHOUSE_ROLE_ID).toBe("1412726855517081701");
     expect(INHOUSE_MANAGER_ROLE_ID).toBe("1542873758770135061");
+  });
+
+  it("builds two numbered removal menus for a full 40-player queue", () => {
+    const rows = buildManualRemoveRows(
+      recruitment.id,
+      Array.from({ length: 40 }, (_, index) => member(index + 1)),
+    ).map((row) => row.toJSON());
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.components[0]).toMatchObject({
+      custom_id: "crq:manual-remove-select:0:7",
+      placeholder: "1~25번째 참가자 선택",
+    });
+    expect(rows[0]?.components[0]?.options).toHaveLength(25);
+    expect(rows[0]?.components[0]?.options?.[0]).toMatchObject({
+      label: "1. 참가자 1",
+      value: member(1).userId,
+    });
+    expect(rows[1]?.components[0]).toMatchObject({
+      custom_id: "crq:manual-remove-select:1:7",
+      placeholder: "26~40번째 참가자 선택",
+    });
+    expect(rows[1]?.components[0]?.options).toHaveLength(15);
+    expect(rows[1]?.components[0]?.options?.[14]).toMatchObject({
+      label: "40. 참가자 40",
+      value: member(40).userId,
+    });
+  });
+
+  it("requires a second destructive click before deletion", () => {
+    const row = buildDeleteConfirmationButtons(recruitment.id)[0]!.toJSON();
+    expect(row.components).toMatchObject([
+      {
+        custom_id: "crq:delete-confirm:7",
+        label: "정말 삭제",
+      },
+      {
+        custom_id: "crq:delete-cancel:7",
+        label: "취소",
+      },
+    ]);
   });
 });

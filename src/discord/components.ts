@@ -7,8 +7,9 @@ import {
   StringSelectMenuBuilder,
   TextInputBuilder,
   TextInputStyle,
+  UserSelectMenuBuilder,
 } from "discord.js";
-import type { GameType } from "../domain/models.js";
+import type { GameType, QueueMember } from "../domain/models.js";
 import { customIds } from "./customIds.js";
 import { SUMMON_CONFIRMATION_TEXT } from "./constants.js";
 
@@ -58,6 +59,19 @@ export function buildRecruitmentButtons(
         .setDisabled(state.registrationClosed)
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
+        .setCustomId(customIds.mention(recruitmentId))
+        .setLabel("전체 멘션")
+        .setEmoji("📣")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(customIds.summon(recruitmentId))
+        .setLabel("전체 소환")
+        .setEmoji("☎️")
+        .setDisabled(!state.summonReady)
+        .setStyle(ButtonStyle.Primary),
+    ),
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
         .setCustomId(customIds.close(recruitmentId))
         .setLabel(state.registrationClosed ? "재오픈" : "마감하기")
         .setEmoji(state.registrationClosed ? "🔓" : "🔒")
@@ -71,23 +85,87 @@ export function buildRecruitmentButtons(
         .setDisabled(!state.teamReady)
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
+        .setCustomId(customIds.manualAdd(recruitmentId))
+        .setLabel("수동 추가")
+        .setEmoji("➕")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(customIds.manualRemove(recruitmentId))
+        .setLabel("수동 제외")
+        .setEmoji("➖")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
         .setCustomId(customIds.delete(recruitmentId))
         .setLabel("삭제")
         .setEmoji("🗑️")
         .setStyle(ButtonStyle.Danger),
     ),
+  ];
+}
+
+export function buildManualAddModal(recruitmentId: number): ModalBuilder {
+  const memberSelect = new UserSelectMenuBuilder()
+    .setCustomId("manual_member")
+    .setPlaceholder("닉네임 일부를 입력해 서버 멤버 검색")
+    .setMinValues(1)
+    .setMaxValues(1)
+    .setRequired(true);
+
+  return new ModalBuilder()
+    .setCustomId(customIds.manualAddModal(recruitmentId))
+    .setTitle("대기열 수동 추가")
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel("추가할 서버 멤버")
+        .setDescription("닉네임 일부만 입력해도 Discord가 가까운 후보를 보여줘요.")
+        .setUserSelectMenuComponent(memberSelect),
+    );
+}
+
+export function buildManualRemoveRows(
+  recruitmentId: number,
+  members: readonly QueueMember[],
+): ActionRowBuilder<StringSelectMenuBuilder>[] {
+  const pageSize = 25;
+  const rows: ActionRowBuilder<StringSelectMenuBuilder>[] = [];
+  for (let offset = 0; offset < members.length; offset += pageSize) {
+    const page = Math.floor(offset / pageSize);
+    const pageMembers = members.slice(offset, offset + pageSize);
+    const firstPosition = offset + 1;
+    const lastPosition = offset + pageMembers.length;
+    rows.push(
+      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(customIds.manualRemoveSelect(recruitmentId, page))
+          .setPlaceholder(`${firstPosition}~${lastPosition}번째 참가자 선택`)
+          .setMinValues(1)
+          .setMaxValues(1)
+          .addOptions(
+            pageMembers.map((member, index) => ({
+              label: `${offset + index + 1}. ${member.displayName}`.slice(0, 100),
+              value: member.userId,
+            })),
+          ),
+      ),
+    );
+  }
+  return rows;
+}
+
+export function buildDeleteConfirmationButtons(
+  recruitmentId: number,
+): ActionRowBuilder<ButtonBuilder>[] {
+  return [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
-        .setCustomId(customIds.mention(recruitmentId))
-        .setLabel("전체 멘션")
-        .setEmoji("📣")
-        .setStyle(ButtonStyle.Secondary),
+        .setCustomId(customIds.deleteConfirm(recruitmentId))
+        .setLabel("정말 삭제")
+        .setEmoji("🗑️")
+        .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
-        .setCustomId(customIds.summon(recruitmentId))
-        .setLabel("전체 소환")
-        .setEmoji("☎️")
-        .setDisabled(!state.summonReady)
-        .setStyle(ButtonStyle.Primary),
+        .setCustomId(customIds.deleteCancel(recruitmentId))
+        .setLabel("취소")
+        .setStyle(ButtonStyle.Secondary),
     ),
   ];
 }

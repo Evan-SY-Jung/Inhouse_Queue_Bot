@@ -46,6 +46,15 @@ export function hasUnlimitedSummonPermission(
   return isAdministrator(interaction) || interactionHasRole(interaction, managerRoleId);
 }
 
+export function canManuallyManageQueue(
+  interaction: RepliableInteraction,
+  managerRoleId: string,
+  restrictedRoleId: string,
+): boolean {
+  if (interactionHasRole(interaction, restrictedRoleId)) return false;
+  return hasUnlimitedSummonPermission(interaction, managerRoleId);
+}
+
 export function canManageRecruitment(
   interaction: RepliableInteraction,
   creatorId: string,
