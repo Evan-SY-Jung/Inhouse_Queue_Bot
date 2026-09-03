@@ -19,10 +19,17 @@ import type {
   ClaimRecruitmentInput,
   GameType,
   Panel,
-  QueueMember,
   Recruitment,
 } from "../domain/models.js";
 import type { RecruitmentRepository } from "../db/repository.js";
+import {
+  buildInitialRecruitmentMessagePayload,
+  buildPanelMessagePayload,
+} from "../messages/discordMessagePayloads.js";
+import {
+  INTERACTION_ACTION_NAMES,
+  INTERACTION_MESSAGES,
+} from "../messages/interactionMessages.js";
 import { buildRecruitmentChannelName } from "../services/channelNames.js";
 import {
   firstQueueMemberIds,
@@ -35,15 +42,16 @@ import {
 } from "../services/reservationTime.js";
 import { parseRiotId } from "../services/riotId.js";
 import type { TeamBuilderService } from "../services/teamBuilder.js";
+import { buildDeleteConfirmationButtons } from "./buttons/confirmationButtons.js";
 import {
-  buildDeleteConfirmationButtons,
   buildImmediateRecruitmentModal,
   buildJoinModal,
   buildManualAddModal,
   buildManualRemoveModal,
   buildSetupModal,
   buildSummonModal,
-} from "./components.js";
+} from "./modals/recruitmentModals.js";
+import { MODAL_FIELD_IDS } from "./modals/modalFieldIds.js";
 import {
   ALL_MENTION_COOLDOWN_KEY,
   INHOUSE_MANAGER_ROLE_ID,
@@ -71,10 +79,6 @@ import {
   isInhouseRoleActionAllowed,
   parseSnowflake,
 } from "./helpers.js";
-import {
-  buildInitialRecruitmentMessagePayload,
-  buildPanelMessagePayload,
-} from "./messagePayloads.js";
 import {
   moveQueueMembersToVoiceChannel,
   type VoiceSummonResult,
@@ -146,7 +150,7 @@ export class BotController {
     this.requireGuild(interaction);
     this.requireInhouseRoleActionAccess(interaction);
     if (!isAdministrator(interaction)) {
-      throw new DomainError("이 명령어는 관리자만 사용할 수 있어요.", "ADMIN_ONLY");
+      throw new DomainError(INTERACTION_MESSAGES.common.commandAdminOnly, "ADMIN_ONLY");
     }
     await interaction.showModal(buildSetupModal());
   }
@@ -167,7 +171,7 @@ export class BotController {
         return;
       case "panel-reservation": {
         throw new DomainError(
-          "내전 예약은 협곡 또는 아람 모집 버튼에서 날짜·시간·타임존을 입력해 만들 수 있어요.",
+          INTERACTION_MESSAGES.legacy.reservationMoved,
           "RESERVATION_MOVED",
         );
       }
@@ -205,7 +209,7 @@ export class BotController {
         await this.handleDeleteCancellation(interaction, customId.id);
         return;
       case "manage":
-        throw new DomainError("이전 관리 버튼은 더 이상 사용하지 않아요.", "MOVED_FEATURE");
+        throw new DomainError(INTERACTION_MESSAGES.legacy.managementMoved, "MOVED_FEATURE");
       default:
         return;
     }
@@ -240,7 +244,7 @@ export class BotController {
         return;
       case "reservation":
         throw new DomainError(
-          "이전 예약 모달은 만료됐어요. 협곡 또는 아람 모집 버튼을 다시 눌러 주세요.",
+          INTERACTION_MESSAGES.legacy.reservationModalExpired,
           "RESERVATION_MOVED",
         );
       case "summon-confirm":
@@ -254,19 +258,21 @@ export class BotController {
   private async handleSetupModal(interaction: ModalSubmitInteraction): Promise<void> {
     const guild = this.requireGuild(interaction);
     if (!isAdministrator(interaction)) {
-      throw new DomainError("내전 패널은 관리자만 만들 수 있어요.", "ADMIN_ONLY");
+      throw new DomainError(INTERACTION_MESSAGES.panel.adminOnly, "ADMIN_ONLY");
     }
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-    const categoryId = parseSnowflake(interaction.fields.getTextInputValue("category_id"));
+    const categoryId = parseSnowflake(
+      interaction.fields.getTextInputValue(MODAL_FIELD_IDS.categoryId),
+    );
     if (!categoryId) {
-      throw new DomainError("올바른 카테고리 ID를 입력해 주세요.", "INVALID_CATEGORY_ID");
+      throw new DomainError(INTERACTION_MESSAGES.panel.invalidCategoryId, "INVALID_CATEGORY_ID");
     }
 
     const category = asCategory(await fetchGuildChannel(guild, categoryId));
     if (!category) {
       throw new DomainError(
-        "해당 ID의 카테고리를 찾지 못했어요. 일반 채팅 채널 ID가 아닌 카테고리 ID인지 확인해 주세요.",
+        INTERACTION_MESSAGES.panel.categoryNotFound,
         "CATEGORY_NOT_FOUND",
       );
     }
@@ -278,7 +284,7 @@ export class BotController {
       const exists = Boolean(await fetchGuildChannel(guild, existing.channelId));
       if (exists) {
         throw new DomainError(
-          `이 카테고리에는 이미 내전 모집 패널 <#${existing.channelId}>이 있어요.`,
+          INTERACTION_MESSAGES.panel.alreadyExists(existing.channelId),
           "ACTIVE_PANEL_EXISTS",
         );
       }
@@ -308,7 +314,7 @@ export class BotController {
       throw error;
     }
 
-    await interaction.editReply(`내전 모집 패널을 만들었어요: <#${channel.id}>`);
+    await interaction.editReply(INTERACTION_MESSAGES.panel.created(channel.id));
   }
 
   private async handleImmediateRecruitmentButton(
@@ -326,13 +332,16 @@ export class BotController {
     gameType: GameType,
   ): Promise<void> {
     const panel = this.requirePanelInteraction(interaction, panelId);
-    const selectedTimezone = interaction.fields.getStringSelectValues("timezone")[0] ?? "";
+    const selectedTimezone =
+      interaction.fields.getStringSelectValues(MODAL_FIELD_IDS.timezone)[0] ?? "";
     const reservation = parseOptionalReservationTime(
-      interaction.fields.getTextInputValue("date"),
-      interaction.fields.getTextInputValue("time"),
+      interaction.fields.getTextInputValue(MODAL_FIELD_IDS.date),
+      interaction.fields.getTextInputValue(MODAL_FIELD_IDS.time),
       selectedTimezone,
     );
-    const description = interaction.fields.getTextInputValue("description").trim();
+    const description = interaction.fields
+      .getTextInputValue(MODAL_FIELD_IDS.description)
+      .trim();
     const now = Date.now();
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -358,7 +367,10 @@ export class BotController {
     const guild = this.requireGuild(interaction);
     const category = asCategory(await fetchGuildChannel(guild, panel.categoryId));
     if (!category) {
-      throw new DomainError("모집 패널의 카테고리가 없어졌어요.", "CATEGORY_NOT_FOUND");
+      throw new DomainError(
+        INTERACTION_MESSAGES.recruitment.categoryMissing,
+        "CATEGORY_NOT_FOUND",
+      );
     }
     const me = guild.members.me ?? (await guild.members.fetchMe());
     assertBotCanCreateRecruitments(category, me);
@@ -393,7 +405,7 @@ export class BotController {
       throw error;
     }
 
-    await interaction.editReply(`내전 대기열이 성공적으로 생성되었어요!: <#${channel.id}>`);
+    await interaction.editReply(INTERACTION_MESSAGES.recruitment.created(channel.id));
   }
 
   private async handleJoinRequest(
@@ -418,8 +430,8 @@ export class BotController {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
     this.requireOpenRegistration(recruitment);
     const riotId = parseRiotId(
-      interaction.fields.getTextInputValue("riot_name"),
-      interaction.fields.getTextInputValue("riot_tag"),
+      interaction.fields.getTextInputValue(MODAL_FIELD_IDS.riotName),
+      interaction.fields.getTextInputValue(MODAL_FIELD_IDS.riotTag),
     );
     await this.completeQueueJoin(
       interaction,
@@ -452,7 +464,9 @@ export class BotController {
       result.position,
       this.config.callSize,
     );
-    await interaction.editReply(`참가 완료! ${positionMessage}${refreshWarning}`);
+    await interaction.editReply(
+      INTERACTION_MESSAGES.queue.joined(positionMessage, refreshWarning),
+    );
   }
 
   private async handleLeave(interaction: ButtonInteraction, recruitmentId: number): Promise<void> {
@@ -460,7 +474,7 @@ export class BotController {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     this.repository.removeQueueMember(recruitment.id, interaction.user.id);
     const refreshWarning = await this.stateService.tryRefreshRecruitmentMessage(recruitment.id);
-    await interaction.editReply(`이걸 쫄튀하네 ㅋ.${refreshWarning}`);
+    await interaction.editReply(INTERACTION_MESSAGES.queue.left(refreshWarning));
   }
 
   private async handleRegistrationToggle(
@@ -468,15 +482,19 @@ export class BotController {
     recruitmentId: number,
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
-    this.requireRecruitmentOperator(interaction, recruitment, "마감/재오픈");
+    this.requireRecruitmentOperator(
+      interaction,
+      recruitment,
+      INTERACTION_ACTION_NAMES.registration,
+    );
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const updated = this.repository.toggleRegistration(recruitment.id);
     const refreshWarning = await this.stateService.tryRefreshRecruitmentMessage(recruitment.id);
-    const resultMessage =
-      updated.registrationState === "CLOSED"
-        ? "참가 신청을 마감했어요."
-        : "참가 신청을 다시 열었어요.";
-    await interaction.editReply(`${resultMessage}${refreshWarning}`);
+    const resultMessage = INTERACTION_MESSAGES.recruitment.registrationUpdated(
+      updated.registrationState === "CLOSED",
+      refreshWarning,
+    );
+    await interaction.editReply(resultMessage);
   }
 
   private async handleTeamFormation(
@@ -484,32 +502,30 @@ export class BotController {
     recruitmentId: number,
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
-    this.requireRecruitmentOperator(interaction, recruitment, "팀 짜기");
+    this.requireRecruitmentOperator(
+      interaction,
+      recruitment,
+      INTERACTION_ACTION_NAMES.teams,
+    );
     if (recruitment.registrationState !== "CLOSED") {
-      throw new DomainError("먼저 참가 신청을 마감해 주세요.", "REGISTRATION_STILL_OPEN");
+      throw new DomainError(
+        INTERACTION_MESSAGES.recruitment.registrationStillOpen,
+        "REGISTRATION_STILL_OPEN",
+      );
     }
 
     const members = this.repository.listQueueMembers(recruitment.id);
     if (members.length < 1) {
       throw new DomainError(
-        "팀을 짜려면 참가자가 최소 1명 필요해요.",
+        INTERACTION_MESSAGES.teamBuilder.noMembers,
         "NOT_ENOUGH_MEMBERS",
       );
     }
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const result = await this.teamBuilderService.createLink(recruitment, members);
-    const excludedMessage =
-      result.excludedCount > 0
-        ? ` · 후순위 제외 ${result.excludedCount}명`
-        : "";
     await interaction.editReply({
-      content: [
-        "⚔️ **웹 팀 편성판을 준비했어요.**",
-        `[드래그 팀 편성판 열기](${result.url})`,
-        `선착순 ${result.selectedCount}명${excludedMessage} · 랭크 ${result.rankedCount}명 · 언랭 ${result.unrankedCount}명 · 미조회 ${result.unavailableCount}명`,
-        `링크는 <t:${Math.floor(result.expiresAt / 1_000)}:R> 만료돼요.`,
-      ].join("\n"),
+      content: INTERACTION_MESSAGES.teamBuilder.ready(result),
       allowedMentions: { parse: [] },
     });
   }
@@ -519,7 +535,10 @@ export class BotController {
     recruitmentId: number,
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
-    this.requireManualQueueOperator(interaction, recruitment, "수동 추가");
+    this.requireManualQueueOperator(
+      interaction,
+      INTERACTION_ACTION_NAMES.manualAdd,
+    );
     await interaction.showModal(buildManualAddModal(recruitment.id));
   }
 
@@ -528,15 +547,21 @@ export class BotController {
     recruitmentId: number,
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
-    this.requireManualQueueOperator(interaction, recruitment, "수동 추가");
+    this.requireManualQueueOperator(
+      interaction,
+      INTERACTION_ACTION_NAMES.manualAdd,
+    );
     const selectedUser = interaction.fields
-      .getSelectedUsers("manual_member", true)
+      .getSelectedUsers(MODAL_FIELD_IDS.manualMember, true)
       .first();
     if (!selectedUser) {
-      throw new DomainError("추가할 서버 멤버를 선택해 주세요.", "MEMBER_NOT_SELECTED");
+      throw new DomainError(
+        INTERACTION_MESSAGES.queue.manualMemberMissing,
+        "MEMBER_NOT_SELECTED",
+      );
     }
     if (selectedUser.bot) {
-      throw new DomainError("봇 계정은 대기열에 추가할 수 없어요.", "BOT_NOT_ALLOWED");
+      throw new DomainError(INTERACTION_MESSAGES.queue.botNotAllowed, "BOT_NOT_ALLOWED");
     }
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -544,7 +569,7 @@ export class BotController {
     const member = await guild.members.fetch(selectedUser.id).catch(() => null);
     if (!member) {
       throw new DomainError(
-        "선택한 사용자를 이 서버에서 찾지 못했어요.",
+        INTERACTION_MESSAGES.queue.guildMemberNotFound,
         "GUILD_MEMBER_NOT_FOUND",
       );
     }
@@ -563,7 +588,11 @@ export class BotController {
     );
     const refreshWarning = await this.stateService.tryRefreshRecruitmentMessage(recruitment.id);
     await interaction.editReply({
-      content: `<@${member.id}>님을 대기열 **${result.position}번째**로 수동 추가했어요.${refreshWarning}`,
+      content: INTERACTION_MESSAGES.queue.manuallyAdded(
+        member.id,
+        result.position,
+        refreshWarning,
+      ),
       allowedMentions: { parse: [] },
     });
   }
@@ -573,10 +602,16 @@ export class BotController {
     recruitmentId: number,
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
-    this.requireManualQueueOperator(interaction, recruitment, "수동 제외");
+    this.requireManualQueueOperator(
+      interaction,
+      INTERACTION_ACTION_NAMES.manualRemove,
+    );
     const members = this.repository.listQueueMembers(recruitment.id);
     if (members.length === 0) {
-      throw new DomainError("대기열에서 제외할 참가자가 없어요.", "NOT_ENOUGH_MEMBERS");
+      throw new DomainError(
+        INTERACTION_MESSAGES.queue.noMemberToRemove,
+        "NOT_ENOUGH_MEMBERS",
+      );
     }
 
     await interaction.showModal(buildManualRemoveModal(recruitment.id, members));
@@ -587,16 +622,19 @@ export class BotController {
     recruitmentId: number,
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
-    this.requireManualQueueOperator(interaction, recruitment, "수동 제외");
+    this.requireManualQueueOperator(
+      interaction,
+      INTERACTION_ACTION_NAMES.manualRemove,
+    );
     const selectedUserIds = [0, 1].flatMap((page) => {
-      const fieldId = `manual_remove_${page}`;
+      const fieldId = MODAL_FIELD_IDS.manualRemove(page);
       return interaction.fields.fields.has(fieldId)
         ? [...interaction.fields.getStringSelectValues(fieldId)]
         : [];
     });
     if (selectedUserIds.length !== 1) {
       throw new DomainError(
-        "두 목록 중 한 곳에서 제외할 참가자 한 명만 선택해 주세요.",
+        INTERACTION_MESSAGES.queue.selectOneToRemove,
         "MEMBER_NOT_SELECTED",
       );
     }
@@ -605,7 +643,7 @@ export class BotController {
     const position = members.findIndex((member) => member.userId === userId);
     if (position < 0) {
       throw new DomainError(
-        "선택한 참가자가 이미 대기열에서 빠졌어요. 수동 제외를 다시 눌러 주세요.",
+        INTERACTION_MESSAGES.queue.removalSelectionExpired,
         "NOT_JOINED",
       );
     }
@@ -616,18 +654,26 @@ export class BotController {
     });
     const refreshWarning = await this.stateService.tryRefreshRecruitmentMessage(recruitment.id);
     await interaction.editReply({
-      content: `대기열 **${position + 1}번째** <@${userId}>님을 수동 제외했어요.${refreshWarning}`,
+      content: INTERACTION_MESSAGES.queue.manuallyRemoved(
+        userId,
+        position + 1,
+        refreshWarning,
+      ),
       allowedMentions: { parse: [] },
     });
   }
 
   private async handleMention(interaction: ButtonInteraction, recruitmentId: number): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
-    this.requireRecruitmentOperator(interaction, recruitment, "전체 멘션");
+    this.requireRecruitmentOperator(
+      interaction,
+      recruitment,
+      INTERACTION_ACTION_NAMES.mention,
+    );
     const members = this.repository.listQueueMembers(recruitment.id);
     if (members.length === 0) {
       throw new DomainError(
-        "대기열에 멘션할 참가자가 없어요.",
+        INTERACTION_MESSAGES.mention.noMembers,
         "NOT_ENOUGH_MEMBERS",
       );
     }
@@ -639,14 +685,14 @@ export class BotController {
     );
     if (!cooldown.acquired) {
       throw new DomainError(
-        `서버 전체 멘션 쿨타임이에요. 약 ${Math.ceil(cooldown.remainingMs / 1_000)}초 뒤에 다시 시도해 주세요.`,
+        INTERACTION_MESSAGES.mention.cooldown(cooldown.remainingMs),
         "MENTION_COOLDOWN",
       );
     }
 
     const targetIds = firstQueueMemberIds(members, this.config.callSize);
     await interaction.reply({
-      content: `📣 **내전 인원 소환!**\n${targetIds.map((id) => `<@${id}>`).join(" ")}`,
+      content: INTERACTION_MESSAGES.mention.content(targetIds),
       allowedMentions: { parse: [], users: targetIds },
     });
     const deleteTimer = setTimeout(() => {
@@ -660,10 +706,17 @@ export class BotController {
     recruitmentId: number,
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
-    this.requireRecruitmentOperator(interaction, recruitment, "전체 소환");
+    this.requireRecruitmentOperator(
+      interaction,
+      recruitment,
+      INTERACTION_ACTION_NAMES.summon,
+    );
     const unlimited = this.hasUnlimitedSummonAccess(interaction);
     if (!unlimited && recruitment.summonState !== "AVAILABLE") {
-      throw new DomainError("올 소환은 이 모집에서 이미 사용됐어요.", "SUMMON_ALREADY_USED");
+      throw new DomainError(
+        INTERACTION_MESSAGES.summon.alreadyUsed,
+        "SUMMON_ALREADY_USED",
+      );
     }
     const members = this.repository.listQueueMembers(recruitment.id);
     this.requireSummonTargetLimit(members.length);
@@ -678,16 +731,20 @@ export class BotController {
     recruitmentId: number,
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
-    this.requireRecruitmentOperator(interaction, recruitment, "전체 소환");
+    this.requireRecruitmentOperator(
+      interaction,
+      recruitment,
+      INTERACTION_ACTION_NAMES.summon,
+    );
     const unlimited = this.hasUnlimitedSummonAccess(interaction);
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     if (
-      interaction.fields.getTextInputValue("confirmation").trim() !==
+      interaction.fields.getTextInputValue(MODAL_FIELD_IDS.summonConfirmation).trim() !==
       SUMMON_CONFIRMATION_TEXT
     ) {
       throw new DomainError(
-        `확인란에 정확히 "${SUMMON_CONFIRMATION_TEXT}"이라고 입력해야 해요.`,
+        INTERACTION_MESSAGES.summon.invalidConfirmation(SUMMON_CONFIRMATION_TEXT),
         "INVALID_CONFIRMATION",
       );
     }
@@ -701,7 +758,7 @@ export class BotController {
     ]);
     if (missingPermissions.length > 0) {
       throw new DomainError(
-        `봇의 음성 채널 권한이 부족해요: ${missingPermissions.join(", ")}`,
+        INTERACTION_MESSAGES.summon.missingBotPermissions(missingPermissions),
         "MISSING_VOICE_PERMISSIONS",
       );
     }
@@ -709,7 +766,10 @@ export class BotController {
     const queue = this.repository.listQueueMembers(recruitment.id);
     const summonLimit = this.requireSummonTargetLimit(queue.length);
     if (!unlimited && !this.repository.tryClaimSummon(recruitment.id)) {
-      throw new DomainError("올 소환이 이미 사용됐거나 현재 처리 중이에요.", "SUMMON_ALREADY_USED");
+      throw new DomainError(
+        INTERACTION_MESSAGES.summon.alreadyProcessing,
+        "SUMMON_ALREADY_USED",
+      );
     }
 
     let summonResult: VoiceSummonResult;
@@ -746,23 +806,28 @@ export class BotController {
           throw new Error("모집 채널을 찾지 못했습니다.");
         }
         await recruitmentChannel.send({
-          content: `🔊 <@${interaction.user.id}>님이 **올 소환** 버튼으로 다음 인원을 <#${target.id}> 채널로 이동시켰어요.\n${summonResult.movedIds
-            .map((id) => `<@${id}>`)
-            .join(" ")}`,
+          content: INTERACTION_MESSAGES.summon.auditLog(
+            interaction.user.id,
+            target.id,
+            summonResult.movedIds,
+          ),
           allowedMentions: { parse: [] },
         });
       } catch (error) {
         console.error(`올 소환 기록 전송 실패 (#${recruitment.id})`, error);
-        logWarning = "\n⚠️ 음성 이동은 완료됐지만 채널에 소환 기록을 남기지 못했어요.";
+        logWarning = INTERACTION_MESSAGES.summon.auditLogWarning;
       }
     }
-    const usageMessage = unlimited
-      ? "운영자 권한으로 횟수 제한 없이 올 소환을 실행했어요."
-      : moved > 0
-        ? "올 소환 사용을 완료했어요."
-        : "실제로 이동한 사람이 없어 사용 횟수는 소모하지 않았어요.";
     await interaction.editReply(
-      `${usageMessage}\n이동 **${moved}명** · 미접속 **${summonResult.notConnected}명** · 이미 대상 방 **${summonResult.alreadyThere}명** · 실패 **${summonResult.failed}명**${refreshWarning}${logWarning}`,
+      INTERACTION_MESSAGES.summon.completed({
+        unlimited,
+        moved,
+        notConnected: summonResult.notConnected,
+        alreadyThere: summonResult.alreadyThere,
+        failed: summonResult.failed,
+        refreshWarning,
+        logWarning,
+      }),
     );
   }
 
@@ -771,9 +836,13 @@ export class BotController {
     recruitmentId: number,
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
-    this.requireRecruitmentOperator(interaction, recruitment, "삭제");
+    this.requireRecruitmentOperator(
+      interaction,
+      recruitment,
+      INTERACTION_ACTION_NAMES.delete,
+    );
     await interaction.reply({
-      content: "⚠️ 정말 이 모집 채널과 대기열을 삭제할까요? 삭제하면 되돌릴 수 없어요.",
+      content: INTERACTION_MESSAGES.deletion.confirmation,
       components: buildDeleteConfirmationButtons(recruitment.id),
       flags: MessageFlags.Ephemeral,
     });
@@ -784,9 +853,13 @@ export class BotController {
     recruitmentId: number,
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
-    this.requireRecruitmentOperator(interaction, recruitment, "삭제 취소");
+    this.requireRecruitmentOperator(
+      interaction,
+      recruitment,
+      INTERACTION_ACTION_NAMES.deleteCancel,
+    );
     await interaction.update({
-      content: "삭제를 취소했어요.",
+      content: INTERACTION_MESSAGES.deletion.cancelled,
       components: [],
     });
   }
@@ -796,7 +869,11 @@ export class BotController {
     recruitmentId: number,
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
-    this.requireRecruitmentOperator(interaction, recruitment, "삭제");
+    this.requireRecruitmentOperator(
+      interaction,
+      recruitment,
+      INTERACTION_ACTION_NAMES.delete,
+    );
     const guild = this.requireGuild(interaction);
     await interaction.deferUpdate();
     const channel = recruitment.channelId
@@ -804,10 +881,16 @@ export class BotController {
       : null;
     if (!channel || channel.type !== ChannelType.GuildText) {
       this.repository.closeRecruitment(recruitment.id, Date.now());
-      throw new DomainError("채널이 이미 삭제되어 모집 기록만 정리했어요.", "CHANNEL_ALREADY_DELETED");
+      throw new DomainError(
+        INTERACTION_MESSAGES.deletion.channelAlreadyDeleted,
+        "CHANNEL_ALREADY_DELETED",
+      );
     }
 
-    await interaction.editReply({ content: "모집 채널을 삭제합니다.", components: [] });
+    await interaction.editReply({
+      content: INTERACTION_MESSAGES.deletion.deleting,
+      components: [],
+    });
     await channel.delete(`${interaction.user.tag}님의 내전 모집 삭제`);
     this.repository.closeRecruitment(recruitment.id, Date.now());
   }
@@ -821,7 +904,7 @@ export class BotController {
       panel.guildId !== guild.id ||
       panel.channelId !== interaction.channelId
     ) {
-      throw new DomainError("이 내전 모집 패널은 더 이상 유효하지 않아요.", "INVALID_PANEL");
+      throw new DomainError(INTERACTION_MESSAGES.panel.invalid, "INVALID_PANEL");
     }
     return panel;
   }
@@ -839,7 +922,10 @@ export class BotController {
       recruitment.guildId !== guild.id ||
       (requireSameChannel && recruitment.channelId !== interaction.channelId)
     ) {
-      throw new DomainError("이 내전 모집은 더 이상 유효하지 않아요.", "INVALID_RECRUITMENT");
+      throw new DomainError(
+        INTERACTION_MESSAGES.recruitment.invalid,
+        "INVALID_RECRUITMENT",
+      );
     }
     return recruitment;
   }
@@ -859,7 +945,7 @@ export class BotController {
       )
     ) {
       throw new DomainError(
-        `권한이 부족해요. ${actionName} 기능은 모집 생성자, Discord 관리자 또는 내전관리자만 사용할 수 있어요.`,
+        INTERACTION_MESSAGES.recruitment.operatorOnly(actionName),
         "RECRUITMENT_OPERATOR_ONLY",
       );
     }
@@ -867,13 +953,15 @@ export class BotController {
 
   private requireOpenRegistration(recruitment: Recruitment): void {
     if (recruitment.registrationState !== "OPEN") {
-      throw new DomainError("이 내전은 참가 신청이 마감됐어요.", "REGISTRATION_CLOSED");
+      throw new DomainError(
+        INTERACTION_MESSAGES.recruitment.registrationClosed,
+        "REGISTRATION_CLOSED",
+      );
     }
   }
 
   private requireManualQueueOperator(
     interaction: RecruitmentInteraction,
-    recruitment: Recruitment,
     actionName: string,
   ): void {
     this.requireInhouseRoleActionAccess(interaction);
@@ -885,7 +973,7 @@ export class BotController {
       )
     ) {
       throw new DomainError(
-        `권한이 부족해요. ${actionName} 기능은 Discord 관리자 또는 내전관리자만 사용할 수 있어요.`,
+        INTERACTION_MESSAGES.recruitment.manualOperatorOnly(actionName),
         "MANUAL_QUEUE_OPERATOR_ONLY",
       );
     }
@@ -896,7 +984,7 @@ export class BotController {
   ): void {
     if (interactionHasRole(interaction, INHOUSE_ROLE_ID)) {
       throw new DomainError(
-        "권한이 부족해요. 내전 역할 사용자는 신청하기와 쫄튀하기만 사용할 수 있어요.",
+        INTERACTION_MESSAGES.recruitment.inhouseRoleRestricted,
         "INHOUSE_ROLE_ACTION_RESTRICTED",
       );
     }
@@ -913,7 +1001,10 @@ export class BotController {
     );
     if (limit === 0) {
       throw new DomainError(
-        `올 소환은 대기열이 최소 ${this.config.callSize}명 채워졌을 때 사용할 수 있어요. 현재 ${memberCount}명이에요.`,
+        INTERACTION_MESSAGES.summon.notEnoughMembers(
+          this.config.callSize,
+          memberCount,
+        ),
         "NOT_ENOUGH_MEMBERS",
       );
     }
@@ -922,7 +1013,7 @@ export class BotController {
 
   private requireGuild<T extends Interaction>(interaction: T): Guild {
     if (!interaction.guild || !interaction.guildId) {
-      throw new DomainError("서버 안에서만 사용할 수 있는 기능이에요.", "GUILD_ONLY");
+      throw new DomainError(INTERACTION_MESSAGES.common.guildOnly, "GUILD_ONLY");
     }
     return interaction.guild;
   }
@@ -931,7 +1022,7 @@ export class BotController {
     const channel = await fetchGuildChannel(guild, SUMMON_VOICE_CHANNEL_ID);
     if (channel?.type !== ChannelType.GuildVoice) {
       throw new DomainError(
-        `설정된 소환 음성 채널(<#${SUMMON_VOICE_CHANNEL_ID}>)을 찾지 못했어요.`,
+        INTERACTION_MESSAGES.summon.voiceChannelNotFound(SUMMON_VOICE_CHANNEL_ID),
         "VOICE_CHANNEL_NOT_FOUND",
       );
     }
@@ -943,16 +1034,17 @@ export class BotController {
     if (!isExpected) console.error("상호작용 처리 실패", error);
     const message = isExpected
       ? error.message
-      : "처리 중 오류가 발생했어요. 봇 권한과 로그를 확인한 뒤 다시 시도해 주세요.";
+      : INTERACTION_MESSAGES.common.genericFailure;
+    const content = INTERACTION_MESSAGES.common.errorReply(message);
 
     if (!interaction.isRepliable()) return;
     try {
       if (interaction.deferred) {
-        await interaction.editReply({ content: `❌ ${message}` });
+        await interaction.editReply({ content });
       } else if (interaction.replied) {
-        await interaction.followUp({ content: `❌ ${message}`, flags: MessageFlags.Ephemeral });
+        await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
       } else {
-        await interaction.reply({ content: `❌ ${message}`, flags: MessageFlags.Ephemeral });
+        await interaction.reply({ content, flags: MessageFlags.Ephemeral });
       }
     } catch (responseError) {
       console.error("오류 응답 전송 실패", responseError);

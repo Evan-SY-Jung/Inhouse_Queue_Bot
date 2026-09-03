@@ -1,6 +1,7 @@
 import { gzipSync, gunzipSync } from "node:zlib";
 import { DomainError } from "../domain/errors.js";
 import type { GameType, QueueMember, Recruitment } from "../domain/models.js";
+import { INTERACTION_MESSAGES } from "../messages/interactionMessages.js";
 import type {
   RiotRankLookup,
   RiotRankQueue,
@@ -97,7 +98,7 @@ export class TeamBuilderService {
     const callSize = this.options.callSize;
     if (!Number.isInteger(callSize) || callSize < 2 || callSize % 2 !== 0) {
       throw new DomainError(
-        "팀 편성 기준 인원은 2 이상의 짝수여야 해요. CALL_SIZE 설정을 확인해 주세요.",
+        INTERACTION_MESSAGES.teamBuilder.invalidTeamSize,
         "INVALID_TEAM_SIZE",
       );
     }
@@ -105,7 +106,7 @@ export class TeamBuilderService {
     const selectedCount = Math.min(members.length, callSize * 2);
     if (selectedCount < 1) {
       throw new DomainError(
-        "팀을 짜려면 참가자가 최소 1명 필요해요.",
+        INTERACTION_MESSAGES.teamBuilder.noMembers,
         "NOT_ENOUGH_MEMBERS",
       );
     }
@@ -138,7 +139,7 @@ export class TeamBuilderService {
     const href = url.toString();
     if (href.length > this.maxUrlLength) {
       throw new DomainError(
-        "참가자 정보가 길어 Discord 링크 한도를 넘었어요. 닉네임을 줄인 뒤 다시 시도해 주세요.",
+        INTERACTION_MESSAGES.teamBuilder.linkTooLong,
         "TEAM_BUILDER_LINK_TOO_LONG",
       );
     }

@@ -1,4 +1,5 @@
 import { DomainError } from "../domain/errors.js";
+import { INTERACTION_MESSAGES } from "../messages/interactionMessages.js";
 
 export interface RiotId {
   name: string;
@@ -10,11 +11,11 @@ export function parseRiotId(nameInput: string, tagInput: string): RiotId {
   const tag = tagInput.trim().replace(/^#+/, "");
 
   if (!name || name.length > 32) {
-    throw new DomainError("라이엇 닉네임을 1~32자로 입력해 주세요.", "INVALID_RIOT_NAME");
+    throw new DomainError(INTERACTION_MESSAGES.riotId.invalidName, "INVALID_RIOT_NAME");
   }
   if (!tag || tag.length > 10 || tag.includes("#")) {
     throw new DomainError(
-      "라이엇 태그를 # 없이 1~10자로 입력해 주세요.",
+      INTERACTION_MESSAGES.riotId.invalidTag,
       "INVALID_RIOT_TAG",
     );
   }

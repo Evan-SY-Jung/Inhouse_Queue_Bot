@@ -9,6 +9,8 @@ import {
   type PermissionOverwrites,
   type RepliableInteraction,
 } from "discord.js";
+import { DomainError } from "../domain/errors.js";
+import { INTERACTION_MESSAGES } from "../messages/interactionMessages.js";
 
 export function parseSnowflake(value: string): string | null {
   const match = value.trim().match(/^(?:<#)?(\d{17,20})>?$/);
@@ -86,8 +88,9 @@ export function assertBotCanCreateRecruitments(category: CategoryChannel, me: Gu
   ];
   const missing = category.permissionsFor(me).missing(required);
   if (missing.length > 0) {
-    throw new Error(
-      `봇에 필요한 채널 권한이 부족합니다: ${missing.join(", ")}`,
+    throw new DomainError(
+      INTERACTION_MESSAGES.common.missingChannelPermissions(missing),
+      "MISSING_CHANNEL_PERMISSIONS",
     );
   }
 }

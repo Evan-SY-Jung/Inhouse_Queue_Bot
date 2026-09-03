@@ -2,13 +2,14 @@ import { ChannelType, type Client, type TextChannel } from "discord.js";
 import type { AppConfig } from "../config.js";
 import type { RecruitmentRepository } from "../db/repository.js";
 import type { Panel, Recruitment } from "../domain/models.js";
-import { buildRecruitmentChannelName } from "../services/channelNames.js";
-import { PANEL_CHANNEL_NAME, RECRUITMENT_THREAD_NAME } from "./constants.js";
-import { isUnknownChannel, isUnknownMessage } from "./discordErrors.js";
+import { INTERACTION_MESSAGES } from "../messages/interactionMessages.js";
 import {
   buildPanelMessagePayload,
   buildRecruitmentMessagePayload,
-} from "./messagePayloads.js";
+} from "../messages/discordMessagePayloads.js";
+import { buildRecruitmentChannelName } from "../services/channelNames.js";
+import { PANEL_CHANNEL_NAME, RECRUITMENT_THREAD_NAME } from "./constants.js";
+import { isUnknownChannel, isUnknownMessage } from "./discordErrors.js";
 
 export class DiscordStateService {
   constructor(
@@ -55,7 +56,7 @@ export class DiscordStateService {
       return "";
     } catch (error) {
       console.error(`모집 임베드 갱신 실패 (#${recruitmentId})`, error);
-      return "\n⚠️ 등록은 저장됐지만 임베드 갱신에 실패했어요. 다음 조작 때 다시 갱신됩니다.";
+      return INTERACTION_MESSAGES.queue.refreshWarning;
     }
   }
 

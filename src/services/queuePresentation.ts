@@ -1,11 +1,14 @@
 import type { QueueMember } from "../domain/models.js";
+import { INTERACTION_MESSAGES } from "../messages/interactionMessages.js";
 
 export function formatQueuePosition(
   position: number,
   callSize: number,
 ): string {
-  if (position <= callSize) return `현재 선착순 **${position}번째**예요.`;
-  return `현재 전체 **${position}번째**예요.`;
+  if (position <= callSize) {
+    return INTERACTION_MESSAGES.queue.firstPosition(position);
+  }
+  return INTERACTION_MESSAGES.queue.overallPosition(position);
 }
 
 export function firstQueueMemberIds(members: QueueMember[], limit: number): string[] {

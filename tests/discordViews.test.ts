@@ -9,17 +9,17 @@ import type { QueueMember, Recruitment } from "../src/domain/models.js";
 import { buildRecruitmentChannelName } from "../src/services/channelNames.js";
 import { customIds, parseCustomId } from "../src/discord/customIds.js";
 import { buildPanelEmbed, buildRecruitmentEmbed } from "../src/discord/embeds.js";
+import { buildDeleteConfirmationButtons } from "../src/discord/buttons/confirmationButtons.js";
+import { buildPanelButtons } from "../src/discord/buttons/panelButtons.js";
+import { buildRecruitmentButtons } from "../src/discord/buttons/recruitmentButtons.js";
 import {
-  buildDeleteConfirmationButtons,
   buildImmediateRecruitmentModal,
   buildJoinModal,
   buildManualAddModal,
   buildManualRemoveModal,
-  buildPanelButtons,
-  buildRecruitmentButtons,
   buildSetupModal,
   buildSummonModal,
-} from "../src/discord/components.js";
+} from "../src/discord/modals/recruitmentModals.js";
 import { applicationCommands } from "../src/discord/commands.js";
 import {
   INHOUSE_MANAGER_ROLE_ID,
@@ -39,7 +39,7 @@ import {
 import {
   buildInitialRecruitmentMessagePayload,
   buildRecruitmentMessagePayload,
-} from "../src/discord/messagePayloads.js";
+} from "../src/messages/discordMessagePayloads.js";
 
 const recruitment: Recruitment = {
   id: 7,

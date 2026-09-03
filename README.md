@@ -138,22 +138,37 @@ npm run dev
 
 운영 Docker 이미지로 실행 중이라면 소스가 이미지 안에 포함되므로 변경 후 이미지를 다시 빌드해야 합니다.
 
+## 버튼·모달·상호작용 문구 수정 위치
+
+화면 요소는 역할별 폴더로 분리되어 있습니다. 문구를 바꿀 때 아래 파일만 보면 됩니다.
+
+- 모집 생성 버튼: [`src/discord/buttons/panelButtons.ts`](src/discord/buttons/panelButtons.ts)
+- 모집 관리 버튼과 배치: [`src/discord/buttons/recruitmentButtons.ts`](src/discord/buttons/recruitmentButtons.ts)
+- 삭제 재확인 버튼: [`src/discord/buttons/confirmationButtons.ts`](src/discord/buttons/confirmationButtons.ts)
+- 신청·수동 관리·소환 모달의 구조: [`src/discord/modals/recruitmentModals.ts`](src/discord/modals/recruitmentModals.ts)
+- 모달 문구와 버튼 클릭·제출 뒤 표시되는 성공·오류·권한 문구: [`src/messages/interactionMessages.ts`](src/messages/interactionMessages.ts)
+- 코어·모집 임베드 본문과 색상: [`src/content/embedConfig.ts`](src/content/embedConfig.ts)
+
+`interactionMessages.ts`의 함수형 문구는 사용자명·순번·인원처럼 실행할 때 달라지는 값만 인자로 받습니다. Discord 처리 흐름을 수정하지 않고 해당 파일의 한국어 문장만 고쳐도 응답에 반영됩니다. 콘솔 로그와 Discord 감사 로그의 내부 `reason`은 운영 추적용이므로 기능 코드 가까이에 유지합니다.
+
 ## 프로젝트 구조
 
 - `src/content/embedConfig.ts` — 사용자가 수정하는 임베드 디자인과 문구
 - `src/content/embedTypes.ts` — 모든 선택형 임베드 설정 타입과 이전 버전 호환 타입
+- `src/discord/buttons/` — 코어·모집·삭제 확인 버튼 생성 코드
+- `src/discord/modals/` — 모달 생성 코드와 입력 필드 ID
 - `src/discord/embedRenderer.ts` — 빈 값, 잘못된 URL, 글자·필드 제한을 안전하게 처리하는 공통 렌더러
 - `src/discord/embeds.ts` — 예약 시간, 게임 정보, 실시간 대기열 토큰 조립
-- `src/discord/messagePayloads.ts` — 코어/모집 메시지 payload 생성 중앙화
+- `src/messages/interactionMessages.ts` — 상호작용 성공·오류·권한 안내 문구 중앙화
+- `src/messages/discordMessagePayloads.ts` — 코어/모집 메시지 payload 생성 중앙화
 - `src/discord/DiscordStateService.ts` — 메시지 갱신, 삭제된 메시지 복구, 재시작 상태 동기화
-- `src/discord/BotController.ts` — Discord 명령어·버튼·모달 흐름 제어
+- `src/discord/BotController.ts` — Discord 명령어·버튼·모달의 처리 흐름만 제어
 - `src/discord/constants.ts` — 고정 소환 음성 채널 ID와 공통 Discord 설정
 - `src/discord/voiceSummon.ts` — 음성 채널 이동과 결과 집계
 - `src/services/queuePresentation.ts` — 참가 순번과 멘션·소환 선착순 대상 계산
 - `src/services/riotId.ts` — 모집별 라이엇 닉네임·태그 검증
 - `src/services/riotApi.ts` — Account/League API 티어 조회, 속도 제한, 메모리 캐시
 - `src/services/teamBuilder.ts` — 정멤 Riot ID 해석과 티어가 포함된 압축형 팀 편성 링크 생성
-- `src/services/teamFormation.ts` — 선착순 10/20명의 무작위 5:5 팀 편성
 - `src/db/sqliteSchema.ts` — SQLite 스키마와 마이그레이션
 - `src/db/sqliteRepository.ts` — DB 읽기·쓰기와 트랜잭션
 - `web/` — GitHub Pages용 드래그 팀 편성 화면(정적 HTML/CSS/JavaScript)
@@ -276,7 +291,7 @@ npm test
 npm run build
 ```
 
-자동 테스트는 DB 생성 제한과 기존 DB 마이그레이션, 게임별 열린 채널 순번 재사용, 최초 `@here` 알림, 선택형 예약 입력 조합, 40명 상한과 2행 명단, 선택형 라이엇 ID 저장·삭제, 신청 마감·재오픈, 관리자 수동 추가·제외와 마감 상태 예외, 삭제 재확인, 생성자·관리자·내전관리자 권한과 내전 역할 제한, 10/20명 소환 대상 제한, 관리자 무제한 소환 권한, Riot API 조회·캐시·실패 격리, 공백을 포함한 정멤/신입 Riot ID 해석, 압축 팀 편성 링크, 티어·디비전·LP 정렬, 5:5 팀 편성, 중복 참가, 서버 쿨타임, 임베드 항목 추가·삭제·빈 설정·이전 버전 호환, 모달·선택 메뉴와 채널 권한, 버튼 ID 라우팅을 검사합니다.
+자동 테스트는 DB 생성 제한과 기존 DB 마이그레이션, 게임별 열린 채널 순번 재사용, 최초 `@here` 알림, 선택형 예약 입력 조합, 40명 상한과 2행 명단, 선택형 라이엇 ID 저장·삭제, 신청 마감·재오픈, 관리자 수동 추가·제외와 마감 상태 예외, 삭제 재확인, 생성자·관리자·내전관리자 권한과 내전 역할 제한, 10/20명 소환 대상 제한, 관리자 무제한 소환 권한, Riot API 조회·캐시·실패 격리, 공백을 포함한 정멤/신입 Riot ID 해석, 압축 팀 편성 링크, 티어·디비전·LP 정렬, 중복 참가, 서버 쿨타임, 임베드 항목 추가·삭제·빈 설정·이전 버전 호환, 모달·선택 메뉴와 채널 권한, 버튼 ID 라우팅을 검사합니다.
 
 실제 Discord 서버에서 확인할 항목은 [docs/LIVE_TEST_CHECKLIST.md](docs/LIVE_TEST_CHECKLIST.md)에 정리되어 있습니다.
 

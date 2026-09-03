@@ -1,4 +1,5 @@
 import { DateTime, IANAZone } from "luxon";
+import { INTERACTION_MESSAGES } from "../messages/interactionMessages.js";
 
 export interface ParsedReservationTime {
   scheduledAt: number;
@@ -20,7 +21,7 @@ export function parseOptionalReservationTime(
   if (providedCount === 0) return null;
   if (providedCount !== 3) {
     throw new ReservationTimeError(
-      "예약하려면 날짜, 시간, 타임존을 모두 입력해 주세요. 예약하지 않으려면 세 항목을 모두 비워 주세요.",
+      INTERACTION_MESSAGES.reservation.incomplete,
     );
   }
   return parseReservationTime(date, time, timezone, now);
@@ -63,19 +64,19 @@ export function parseReservationTime(
   const timezoneLabel = timezoneInput.trim();
 
   if (!/^\d{2}\/\d{2}\/\d{4}$/.test(date)) {
-    throw new ReservationTimeError("날짜는 MM/DD/YYYY 형식으로 입력해 주세요.");
+    throw new ReservationTimeError(INTERACTION_MESSAGES.reservation.invalidDate);
   }
   if (!/^\d{2}[:/]\d{2}$/.test(rawTime)) {
-    throw new ReservationTimeError("시간은 HH:mm 형식의 24시간제로 입력해 주세요.");
+    throw new ReservationTimeError(INTERACTION_MESSAGES.reservation.invalidTime);
   }
   if (!timezoneLabel) {
-    throw new ReservationTimeError("타임존을 입력해 주세요.");
+    throw new ReservationTimeError(INTERACTION_MESSAGES.reservation.missingTimezone);
   }
 
   const resolvedZone = resolveReservationTimezone(timezoneLabel);
   if (!isValidZone(resolvedZone)) {
     throw new ReservationTimeError(
-      "타임존이 올바르지 않아요. PST, EST, CST, MT 중 하나를 선택해 주세요.",
+      INTERACTION_MESSAGES.reservation.invalidTimezone,
     );
   }
 
@@ -86,10 +87,10 @@ export function parseReservationTime(
   });
 
   if (!parsed.isValid || parsed.toFormat("LL/dd/yyyy HH:mm") !== `${date} ${time}`) {
-    throw new ReservationTimeError("존재하지 않는 날짜 또는 시간이거나 서머타임 전환 구간이에요.");
+    throw new ReservationTimeError(INTERACTION_MESSAGES.reservation.invalidDateTime);
   }
   if (parsed.toMillis() <= now) {
-    throw new ReservationTimeError("예약 시간은 현재보다 미래여야 해요.");
+    throw new ReservationTimeError(INTERACTION_MESSAGES.reservation.notFuture);
   }
 
   return {
