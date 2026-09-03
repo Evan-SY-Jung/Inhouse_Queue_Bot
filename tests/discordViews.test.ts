@@ -14,7 +14,7 @@ import {
   buildImmediateRecruitmentModal,
   buildJoinModal,
   buildManualAddModal,
-  buildManualRemoveRows,
+  buildManualRemoveModal,
   buildPanelButtons,
   buildRecruitmentButtons,
   buildSetupModal,
@@ -330,10 +330,9 @@ describe("Discord views", () => {
       action: "manual-add-submit",
       id: 7,
     });
-    expect(parseCustomId(customIds.manualRemoveSelect(7, 1))).toEqual({
-      action: "manual-remove-select",
+    expect(parseCustomId(customIds.manualRemoveModal(7))).toEqual({
+      action: "manual-remove-submit",
       id: 7,
-      page: 1,
     });
     expect(parseCustomId(customIds.deleteConfirm(7))).toEqual({
       action: "delete-confirm",
@@ -684,7 +683,7 @@ describe("Discord views", () => {
       "manual-add",
       "manual-add-submit",
       "manual-remove",
-      "manual-remove-select",
+      "manual-remove-submit",
       "setup",
     ]) {
       expect(isInhouseRoleActionAllowed(action)).toBe(false);
@@ -730,30 +729,58 @@ describe("Discord views", () => {
     expect(INHOUSE_MANAGER_ROLE_ID).toBe("1542873758770135061");
   });
 
-  it("builds two numbered removal menus for a full 40-player queue", () => {
-    const rows = buildManualRemoveRows(
+  it("builds numbered removal menus inside a modal for up to 40 players", () => {
+    const fullModal = buildManualRemoveModal(
       recruitment.id,
       Array.from({ length: 40 }, (_, index) => member(index + 1)),
-    ).map((row) => row.toJSON());
+    ).toJSON();
+    const shortModal = buildManualRemoveModal(
+      recruitment.id,
+      Array.from({ length: 10 }, (_, index) => member(index + 1)),
+    ).toJSON();
+    const fullFields = fullModal.components as Array<{
+      component: { options?: Array<{ label: string; value: string }> };
+    }>;
 
-    expect(rows).toHaveLength(2);
-    expect(rows[0]?.components[0]).toMatchObject({
-      custom_id: "crq:manual-remove-select:0:7",
-      placeholder: "1~25번째 참가자 선택",
+    expect(fullModal.custom_id).toBe("crq:manual-remove-submit:7");
+    expect(fullModal.components).toHaveLength(2);
+    expect(fullModal.components[0]).toMatchObject({
+      label: "1~25번째 대기열",
+      component: {
+        custom_id: "manual_remove_0",
+        placeholder: "1~25번째 참가자 선택",
+        min_values: 0,
+        max_values: 1,
+        required: false,
+      },
     });
-    expect(rows[0]?.components[0]?.options).toHaveLength(25);
-    expect(rows[0]?.components[0]?.options?.[0]).toMatchObject({
+    expect(fullFields[0]?.component.options).toHaveLength(25);
+    expect(fullFields[0]?.component.options?.[0]).toMatchObject({
       label: "1. 참가자 1",
       value: member(1).userId,
     });
-    expect(rows[1]?.components[0]).toMatchObject({
-      custom_id: "crq:manual-remove-select:1:7",
-      placeholder: "26~40번째 참가자 선택",
+    expect(fullModal.components[1]).toMatchObject({
+      label: "26~40번째 대기열",
+      component: {
+        custom_id: "manual_remove_1",
+        placeholder: "26~40번째 참가자 선택",
+        min_values: 0,
+        max_values: 1,
+        required: false,
+      },
     });
-    expect(rows[1]?.components[0]?.options).toHaveLength(15);
-    expect(rows[1]?.components[0]?.options?.[14]).toMatchObject({
+    expect(fullFields[1]?.component.options).toHaveLength(15);
+    expect(fullFields[1]?.component.options?.[14]).toMatchObject({
       label: "40. 참가자 40",
       value: member(40).userId,
+    });
+    expect(shortModal.components).toHaveLength(1);
+    expect(shortModal.components[0]).toMatchObject({
+      component: {
+        min_values: 1,
+        max_values: 1,
+        required: true,
+      },
     });
   });
 

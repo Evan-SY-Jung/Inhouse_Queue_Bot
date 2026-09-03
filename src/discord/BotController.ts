@@ -10,7 +10,6 @@ import {
   type Guild,
   type Interaction,
   type ModalSubmitInteraction,
-  type StringSelectMenuInteraction,
   type TextChannel,
   type VoiceChannel,
 } from "discord.js";
@@ -41,7 +40,7 @@ import {
   buildImmediateRecruitmentModal,
   buildJoinModal,
   buildManualAddModal,
-  buildManualRemoveRows,
+  buildManualRemoveModal,
   buildSetupModal,
   buildSummonModal,
 } from "./components.js";
@@ -81,10 +80,7 @@ import {
   type VoiceSummonResult,
 } from "./voiceSummon.js";
 
-type RecruitmentInteraction =
-  | ButtonInteraction
-  | ModalSubmitInteraction
-  | StringSelectMenuInteraction;
+type RecruitmentInteraction = ButtonInteraction | ModalSubmitInteraction;
 
 export class BotController {
   readonly client: Client;
@@ -137,10 +133,6 @@ export class BotController {
       }
       if (interaction.isModalSubmit()) {
         await this.handleModal(interaction);
-        return;
-      }
-      if (interaction.isStringSelectMenu()) {
-        await this.handleStringSelect(interaction);
       }
     } catch (error) {
       await this.respondWithError(interaction, error);
@@ -243,6 +235,9 @@ export class BotController {
       case "manual-add-submit":
         await this.handleManualAdd(interaction, customId.id);
         return;
+      case "manual-remove-submit":
+        await this.handleManualRemove(interaction, customId.id);
+        return;
       case "reservation":
         throw new DomainError(
           "이전 예약 모달은 만료됐어요. 협곡 또는 아람 모집 버튼을 다시 눌러 주세요.",
@@ -254,14 +249,6 @@ export class BotController {
       default:
         return;
     }
-  }
-
-  private async handleStringSelect(
-    interaction: StringSelectMenuInteraction,
-  ): Promise<void> {
-    const customId = parseCustomId(interaction.customId);
-    if (!customId || customId.action !== "manual-remove-select") return;
-    await this.handleManualRemove(interaction, customId.id);
   }
 
   private async handleSetupModal(interaction: ModalSubmitInteraction): Promise<void> {
@@ -592,24 +579,28 @@ export class BotController {
       throw new DomainError("대기열에서 제외할 참가자가 없어요.", "NOT_ENOUGH_MEMBERS");
     }
 
-    await interaction.reply({
-      content: "대기열에서 제외할 참가자를 선택해 주세요.",
-      components: buildManualRemoveRows(recruitment.id, members),
-      flags: MessageFlags.Ephemeral,
-      allowedMentions: { parse: [] },
-    });
+    await interaction.showModal(buildManualRemoveModal(recruitment.id, members));
   }
 
   private async handleManualRemove(
-    interaction: StringSelectMenuInteraction,
+    interaction: ModalSubmitInteraction,
     recruitmentId: number,
   ): Promise<void> {
     const recruitment = this.requireRecruitmentInteraction(interaction, recruitmentId);
     this.requireManualQueueOperator(interaction, recruitment, "수동 제외");
-    const userId = interaction.values[0];
-    if (!userId) {
-      throw new DomainError("제외할 참가자를 선택해 주세요.", "MEMBER_NOT_SELECTED");
+    const selectedUserIds = [0, 1].flatMap((page) => {
+      const fieldId = `manual_remove_${page}`;
+      return interaction.fields.fields.has(fieldId)
+        ? [...interaction.fields.getStringSelectValues(fieldId)]
+        : [];
+    });
+    if (selectedUserIds.length !== 1) {
+      throw new DomainError(
+        "두 목록 중 한 곳에서 제외할 참가자 한 명만 선택해 주세요.",
+        "MEMBER_NOT_SELECTED",
+      );
     }
+    const userId = selectedUserIds[0]!;
     const members = this.repository.listQueueMembers(recruitment.id);
     const position = members.findIndex((member) => member.userId === userId);
     if (position < 0) {
@@ -619,14 +610,13 @@ export class BotController {
       );
     }
 
-    await interaction.deferUpdate();
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     this.repository.removeQueueMember(recruitment.id, userId, {
       allowClosedRegistration: true,
     });
     const refreshWarning = await this.stateService.tryRefreshRecruitmentMessage(recruitment.id);
     await interaction.editReply({
       content: `대기열 **${position + 1}번째** <@${userId}>님을 수동 제외했어요.${refreshWarning}`,
-      components: [],
       allowedMentions: { parse: [] },
     });
   }

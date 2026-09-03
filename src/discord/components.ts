@@ -122,34 +122,46 @@ export function buildManualAddModal(recruitmentId: number): ModalBuilder {
     );
 }
 
-export function buildManualRemoveRows(
+export function buildManualRemoveModal(
   recruitmentId: number,
   members: readonly QueueMember[],
-): ActionRowBuilder<StringSelectMenuBuilder>[] {
+): ModalBuilder {
   const pageSize = 25;
-  const rows: ActionRowBuilder<StringSelectMenuBuilder>[] = [];
+  const pageCount = Math.ceil(members.length / pageSize);
+  const labels: LabelBuilder[] = [];
   for (let offset = 0; offset < members.length; offset += pageSize) {
     const page = Math.floor(offset / pageSize);
     const pageMembers = members.slice(offset, offset + pageSize);
     const firstPosition = offset + 1;
     const lastPosition = offset + pageMembers.length;
-    rows.push(
-      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-        new StringSelectMenuBuilder()
-          .setCustomId(customIds.manualRemoveSelect(recruitmentId, page))
-          .setPlaceholder(`${firstPosition}~${lastPosition}번째 참가자 선택`)
-          .setMinValues(1)
-          .setMaxValues(1)
-          .addOptions(
-            pageMembers.map((member, index) => ({
-              label: `${offset + index + 1}. ${member.displayName}`.slice(0, 100),
-              value: member.userId,
-            })),
-          ),
-      ),
+    const required = pageCount === 1;
+    const select = new StringSelectMenuBuilder()
+      .setCustomId(`manual_remove_${page}`)
+      .setPlaceholder(`${firstPosition}~${lastPosition}번째 참가자 선택`)
+      .setMinValues(required ? 1 : 0)
+      .setMaxValues(1)
+      .setRequired(required)
+      .addOptions(
+        pageMembers.map((member, index) => ({
+          label: `${offset + index + 1}. ${member.displayName}`.slice(0, 100),
+          value: member.userId,
+        })),
+      );
+    labels.push(
+      new LabelBuilder()
+        .setLabel(`${firstPosition}~${lastPosition}번째 대기열`)
+        .setDescription(
+          required
+            ? "제외할 참가자를 선택하세요."
+            : "두 목록 중 한 곳에서만 참가자를 선택하세요.",
+        )
+        .setStringSelectMenuComponent(select),
     );
   }
-  return rows;
+  return new ModalBuilder()
+    .setCustomId(customIds.manualRemoveModal(recruitmentId))
+    .setTitle("대기열 수동 제외")
+    .addLabelComponents(labels);
 }
 
 export function buildDeleteConfirmationButtons(
